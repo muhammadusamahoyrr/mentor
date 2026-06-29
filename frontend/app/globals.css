@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+/* ── Class-based dark variant ─────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Design Token System ──────────────────────────────────── */
+/*
+ *  All surface, text, and border tokens are defined here.
+ *  .dark overrides the same variable names with navy palette values.
+ *  Tailwind utilities (bg-card, text-ink, border-wire, …) reference
+ *  these variables, so dark mode is automatic — no dark: scatter.
+ */
+@theme {
+  /* Surfaces */
+  --color-surface: #f8fafc;   /* page background */
+  --color-card:    #ffffff;   /* card / modal */
+  --color-panel:   #f1f5f9;   /* inner panel / input bg */
+  --color-lift:    #e2e8f0;   /* hover / elevated state */
+
+  /* Text */
+  --color-ink:   #0f172a;   /* headings / primary text */
+  --color-dim:   #475569;   /* body / secondary text */
+  --color-ghost: #94a3b8;   /* muted / placeholder text */
+
+  /* Borders */
+  --color-wire: #e2e8f0;   /* standard border */
+  --color-haze: #f1f5f9;   /* subtle / inner border */
+
+  /* Brand */
+  --color-brand:        #2563eb;
+  --color-brand-hover:  #1d4ed8;
+  --color-brand-muted:  #eff6ff;
+  --color-brand-border: #bfdbfe;
+
+  /* Semantic status */
+  --color-success:       #059669;
+  --color-success-light: #d1fae5;
+  --color-warning:       #d97706;
+  --color-warning-light: #fef3c7;
+  --color-danger:        #dc2626;
+  --color-danger-light:  #fee2e2;
+
+  /* Radius */
+  --radius-xl:  1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+}
+
+/* ── Dark mode token overrides — deep-navy palette ─────────── */
+/*
+ *  Not grey. Healthcare warrants trust and calm:
+ *  a deep-blue navy communicates precision and professionalism.
+ *  Elevation = lighter surface (standard dark-UI principle).
+ */
+.dark {
+  --color-surface: #0f172a;   /* user's base — deep navy page bg */
+  --color-card:    #1b2a42;   /* +2 stops — cards pop from page */
+  --color-panel:   #233352;   /* +4 stops — inputs & panels */
+  --color-lift:    #2c3f63;   /* +6 stops — hover / active */
+
+  --color-ink:   #e2ecff;   /* soft blue-white — crisp headings */
+  --color-dim:   #8ba8cc;   /* sky-blue-grey — body text */
+  --color-ghost: #526d94;   /* muted blue — labels & placeholders */
+
+  --color-wire: #2c3f63;   /* same as lift — visible separator */
+  --color-haze: #1b2a42;   /* same as card — subtle inner border */
+
+  --scrollbar-thumb: #2c3f63;
+  --scrollbar-hover: #3a5280;
+}
+
+/* ── Global base ─────────────────────────────────────────── */
+body {
+  background-color: var(--color-surface);
+  background-image:
+    radial-gradient(at 0%   0%,   rgba(37, 99, 235, 0.05)  0px, transparent 50%),
+    radial-gradient(at 100% 0%,   rgba(5, 150, 105, 0.04)  0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.04) 0px, transparent 50%),
+    radial-gradient(at 0%   100%, rgba(217, 119, 6, 0.03)  0px, transparent 50%);
+  color: var(--color-ink);
+  font-family: var(--font-plus-jakarta), 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── Theme transition helper ─────────────────────────────── */
+/*
+ *  Add .tt to any element whose bg/border/color should
+ *  animate when the theme switches.
+ */
+.tt {
+  transition:
+    background-color 0.25s ease,
+    border-color     0.25s ease,
+    color            0.25s ease;
+}
+
+/* ── Glassmorphism ──────────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.dark .glass {
+  background: rgba(7, 16, 30, 0.88);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(100, 160, 255, 0.07);
+}
+
+/* ── Bento hover ─────────────────────────────────────────── */
+.bento-card {
+  @apply transition-all duration-300 hover:shadow-2xl hover:shadow-blue-600/10 hover:-translate-y-1;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+:root {
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-hover: #94a3b8;
+}
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+/* ── Skeleton shimmer ────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -1000px 0; }
+  100% { background-position:  1000px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, #0d1829 25%, #122035 50%, #0d1829 75%);
+  background-size: 1000px 100%;
+}

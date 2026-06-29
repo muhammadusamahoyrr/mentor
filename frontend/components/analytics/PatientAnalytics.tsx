@@ -1,0 +1,215 @@
+'use client';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import {
+  AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine,
+} from 'recharts';
+import { Heart, Activity, Scale, TrendingDown } from 'lucide-react';
+import { MOCK_VITALS_TREND, MOCK_APPOINTMENT_HISTORY } from '@/lib/mockData';
+
+const VITAL_UNITS: Record<string, string> = {
+  heartRate: ' bpm',
+  systolic:  ' mmHg',
+  diastolic: ' mmHg',
+  weight:    ' kg',
+};
+
+const ChartTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-card border border-wire rounded-xl px-4 py-3 shadow-xl text-xs tt">
+      <p className="font-black text-ink mb-2 tt">{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.dataKey} className="flex items-center gap-2 mb-1">
+          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="text-dim tt">{p.name}:</span>
+          <span className="font-bold text-ink ml-1 tt">
+            {p.value}{VITAL_UNITS[p.dataKey] ?? ''}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+type VitalKey = 'heartRate' | 'systolic' | 'weight';
+
+const VITAL_CONFIG: Record<VitalKey, { label: string; unit: string; color: string; icon: any; refLow: number; refHigh: number; gradient: string }> = {
+  heartRate: { label: 'Heart Rate',     unit: 'bpm',  color: '#ef4444', icon: Heart,       refLow: 60,  refHigh: 100, gradient: 'gradHR'  },
+  systolic:  { label: 'Blood Pressure', unit: 'mmHg', color: '#3b82f6', icon: Activity,    refLow: 90,  refHigh: 120, gradient: 'gradBP'  },
+  weight:    { label: 'Body Weight',    unit: 'kg',   color: '#10b981', icon: Scale,        refLow: 60,  refHigh: 90,  gradient: 'gradWgt' },
+};
+
+export default function PatientAnalytics() {
+  const [activeVital, setActiveVital] = useState<VitalKey>('heartRate');
+  const config = VITAL_CONFIG[activeVital];
+  const Icon = config.icon;
+
+  if (MOCK_VITALS_TREND.length < 2) return null;
+  const latest = MOCK_VITALS_TREND[MOCK_VITALS_TREND.length - 1];
+  const prev    = MOCK_VITALS_TREND[MOCK_VITALS_TREND.length - 2];
+  const delta   = (latest[activeVital] - prev[activeVital]).toFixed(1);
+  const improved = Number(delta) <= 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      className="mt-10 space-y-6"
+    >
+      <div>
+        <h2 className="text-2xl font-black text-ink tracking-tight tt">My Health Analytics</h2>
+        <p className="text-dim text-sm font-medium mt-0.5 tt">Personal vitals & appointment history at a glance</p>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+
+        {/* Vitals selector + chart */}
+        <div className="lg:col-span-2 bg-card rounded-2xl border border-wire p-6 tt">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl border" style={{ background: `${config.color}18`, borderColor: `${config.color}30` }}>
+                <Icon className="h-5 w-5" style={{ color: config.color }} />
+              </div>
+              <div>
+                <h3 className="font-black text-ink text-base tt">{config.label}</h3>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-2xl font-black" style={{ color: config.color }}>
+                    {latest[activeVital]}
+                  </span>
+                  <span className="text-ghost text-xs font-bold tt">{config.unit}</span>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${improved ? 'bg-success-light text-success' : 'bg-danger-light text-danger'}`}>
+                    {improved ? '▼' : '▲'} {Math.abs(Number(delta))}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Vital selector pills */}
+            <div className="flex gap-1 flex-wrap">
+              {(Object.keys(VITAL_CONFIG) as VitalKey[]).map(k => (
+                <button
+                  key={k}
+                  onClick={() => setActiveVital(k)}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                    activeVital === k ? 'text-white shadow-md' : 'bg-panel text-ghost hover:text-ink tt'
+                  }`}
+                  style={activeVital === k ? { background: VITAL_CONFIG[k].color } : {}}
+                >
+                  {VITAL_CONFIG[k].label.split(' ')[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={MOCK_VITALS_TREND}>
+              <defs>
+                <linearGradient id={config.gradient} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={config.color} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={config.color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-wire)" strokeOpacity={0.5} vertical={false} />
+              <XAxis dataKey="date" tick={{ fill: 'var(--color-ghost)', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
+              <YAxis
+                tick={{ fill: 'var(--color-ghost)', fontSize: 10 }} axisLine={false} tickLine={false} width={36}
+                domain={[config.refLow - 10, config.refHigh + 15]}
+              />
+              <Tooltip content={<ChartTooltip />} />
+              <ReferenceLine y={config.refHigh} stroke={config.color} strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: 'Upper', fill: 'var(--color-ghost)', fontSize: 9, fontWeight: 700 }} />
+              <ReferenceLine y={config.refLow}  stroke={config.color} strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: 'Lower', fill: 'var(--color-ghost)', fontSize: 9, fontWeight: 700 }} />
+              <Area
+                type="monotone" dataKey={activeVital} name={config.label}
+                stroke={config.color} strokeWidth={2.5}
+                fill={`url(#${config.gradient})`}
+                dot={{ r: 4, fill: config.color, strokeWidth: 2, stroke: 'var(--color-card)' }}
+                activeDot={{ r: 6 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Quick vitals summary cards */}
+        <div className="flex flex-col gap-4">
+          {(Object.entries(VITAL_CONFIG) as [VitalKey, typeof VITAL_CONFIG[VitalKey]][]).map(([key, cfg]) => {
+            const val = latest[key];
+            const inRange = val >= cfg.refLow && val <= cfg.refHigh;
+            const Ic = cfg.icon;
+            return (
+              <motion.button
+                key={key}
+                whileHover={{ scale: 1.02 }}
+                onClick={() => setActiveVital(key)}
+                className={`bg-card border rounded-2xl p-5 text-left transition-all tt ${activeVital === key ? 'border-opacity-80 shadow-lg' : 'border-wire'}`}
+                style={activeVital === key ? { borderColor: cfg.color, boxShadow: `0 4px 24px ${cfg.color}20` } : {}}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2 rounded-xl" style={{ background: `${cfg.color}18` }}>
+                    <Ic className="h-4 w-4" style={{ color: cfg.color }} />
+                  </div>
+                  <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${inRange ? 'bg-success-light text-success' : 'bg-warning-light text-warning'}`}>
+                    {inRange ? 'Normal' : 'Watch'}
+                  </span>
+                </div>
+                <p className="text-[10px] font-black text-ghost uppercase tracking-widest tt">{cfg.label}</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black text-ink tt">{val}</span>
+                  <span className="text-xs text-ghost tt">{cfg.unit}</span>
+                </div>
+                {/* mini range bar */}
+                <div className="mt-3 h-1.5 bg-panel rounded-full overflow-hidden tt">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      background: cfg.color,
+                      width: `${Math.max(0, Math.min(100, ((val - cfg.refLow) / (cfg.refHigh - cfg.refLow)) * 100))}%`,
+                      opacity: 0.7,
+                    }}
+                  />
+                </div>
+              </motion.button>
+            );
+          })}
+        </div>
+
+        {/* Appointment history bar chart */}
+        <div className="lg:col-span-3 bg-card rounded-2xl border border-wire p-6 tt">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
+                <TrendingDown className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="font-black text-ink text-base tt">Appointment History</h3>
+                <p className="text-ghost text-xs font-medium tt">Bookings vs cancellations over 6 months</p>
+              </div>
+            </div>
+            <div className="flex gap-6">
+              {[{ label: 'Total Booked', value: '11', color: '#6366f1' }, { label: 'Cancelled', value: '2', color: '#ef4444' }].map(kpi => (
+                <div key={kpi.label} className="text-right">
+                  <p className="text-[10px] font-black text-ghost uppercase tracking-widest tt">{kpi.label}</p>
+                  <p className="text-xl font-black mt-0.5" style={{ color: kpi.color }}>{kpi.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={140}>
+            <BarChart data={MOCK_APPOINTMENT_HISTORY} barSize={14} barGap={4}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-wire)" strokeOpacity={0.5} vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: 'var(--color-ghost)', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'var(--color-ghost)', fontSize: 11 }} axisLine={false} tickLine={false} width={24} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--color-wire)', opacity: 0.25, radius: 6 }} />
+              <Bar dataKey="booked"    name="Booked"     fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="cancelled" name="Cancelled"  fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.8} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+      </div>
+    </motion.div>
+  );
+}
