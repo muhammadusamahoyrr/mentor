@@ -1,0 +1,30 @@
+{
+  "name": "notes-service",
+  "version": "1.0.0",
+  "description": "Prisma + SQLite service demonstrating ORM, migrations and a Doctor -> Notes relationship",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "jest",
+    "lint": "eslint .",
+    "migrate": "prisma migrate dev",
+    "migrate:status": "prisma migrate status",
+    "generate": "prisma generate"
+  },
+  "keywords": [],
+  "author": "Muhammad Usama",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "jest": "^30.4.2",
+    "prisma": "^6.19.3"
+  }
+}

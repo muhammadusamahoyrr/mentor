@@ -1,0 +1,5 @@
+node_modules/
+# SQLite database files are generated locally by migrations
+prisma/dev.db
+prisma/dev.db-journal
+coverage/

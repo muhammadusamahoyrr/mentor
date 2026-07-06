@@ -1,0 +1,36 @@
+// Prisma schema — the ORM layer.
+// Run `npx prisma migrate dev` to turn these models into real SQL migration files.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Parent side of the one-to-many relationship.
+model Doctor {
+  id             Int      @id @default(autoincrement())
+  name           String
+  email          String   @unique
+  specialization String?
+  createdAt      DateTime @default(now())
+
+  // A doctor has many notes.
+  notes Note[]
+}
+
+// Child side — each Note belongs to exactly one Doctor (foreign key).
+model Note {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // The relationship: doctorId is the foreign key referencing Doctor.id.
+  doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  doctorId Int
+}

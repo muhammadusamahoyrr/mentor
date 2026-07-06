@@ -1,0 +1,200 @@
+{
+  "clientName": "Thunder Client",
+  "collectionName": "Notes Service (Week 2)",
+  "collectionId": "notes-svc-col-0001",
+  "dateExported": "2026-07-06T00:00:00.000Z",
+  "version": "1.2",
+  "folders": [
+    {
+      "_id": "folder-doctors",
+      "name": "Doctors",
+      "containerId": "",
+      "created": "2026-07-06T00:00:00.000Z",
+      "sortNum": 10000
+    },
+    {
+      "_id": "folder-notes",
+      "name": "Notes (CRUD)",
+      "containerId": "",
+      "created": "2026-07-06T00:00:00.000Z",
+      "sortNum": 20000
+    }
+  ],
+  "settings": {},
+  "requests": [
+    {
+      "_id": "req-health",
+      "colId": "notes-svc-col-0001",
+      "containerId": "",
+      "name": "0. Health check",
+      "url": "http://localhost:3005/health",
+      "method": "GET",
+      "sortNum": 5000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": { "type": "none", "raw": "", "form": [] }
+    },
+    {
+      "_id": "req-doctor-create",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-doctors",
+      "name": "1. Create doctor",
+      "url": "http://localhost:3005/api/doctors",
+      "method": "POST",
+      "sortNum": 11000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"name\": \"Dr. House\",\n  \"email\": \"house@demo.com\",\n  \"specialization\": \"Diagnostics\"\n}",
+        "form": []
+      }
+    },
+    {
+      "_id": "req-doctor-list",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-doctors",
+      "name": "2. List doctors (with their notes)",
+      "url": "http://localhost:3005/api/doctors",
+      "method": "GET",
+      "sortNum": 12000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": { "type": "none", "raw": "", "form": [] }
+    },
+    {
+      "_id": "req-note-create",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "3. Create note",
+      "url": "http://localhost:3005/api/notes",
+      "method": "POST",
+      "sortNum": 21000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"doctorId\": 1,\n  \"title\": \"BP reading\",\n  \"content\": \"120/80, patient stable\"\n}",
+        "form": []
+      }
+    },
+    {
+      "_id": "req-note-list",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "4. List all notes",
+      "url": "http://localhost:3005/api/notes",
+      "method": "GET",
+      "sortNum": 22000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": { "type": "none", "raw": "", "form": [] }
+    },
+    {
+      "_id": "req-note-list-filter",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "5. List notes filtered by doctor (?doctorId=1)",
+      "url": "http://localhost:3005/api/notes?doctorId=1",
+      "method": "GET",
+      "sortNum": 23000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [],
+      "params": [{ "name": "doctorId", "value": "1", "isPath": false }],
+      "body": { "type": "none", "raw": "", "form": [] }
+    },
+    {
+      "_id": "req-note-get-one",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "6. Get one note (doctor joined in)",
+      "url": "http://localhost:3005/api/notes/1",
+      "method": "GET",
+      "sortNum": 24000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": { "type": "none", "raw": "", "form": [] }
+    },
+    {
+      "_id": "req-note-update",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "7. Update note",
+      "url": "http://localhost:3005/api/notes/1",
+      "method": "PUT",
+      "sortNum": 25000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"title\": \"Morning BP reading\"\n}",
+        "form": []
+      }
+    },
+    {
+      "_id": "req-note-delete",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "8. Delete note",
+      "url": "http://localhost:3005/api/notes/1",
+      "method": "DELETE",
+      "sortNum": 26000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [],
+      "params": [],
+      "body": { "type": "none", "raw": "", "form": [] }
+    },
+    {
+      "_id": "req-note-invalid",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "9. (Test) Invalid note -> 400",
+      "url": "http://localhost:3005/api/notes",
+      "method": "POST",
+      "sortNum": 27000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"doctorId\": 1,\n  \"title\": \"\",\n  \"content\": \"x\"\n}",
+        "form": []
+      }
+    },
+    {
+      "_id": "req-note-missing-doctor",
+      "colId": "notes-svc-col-0001",
+      "containerId": "folder-notes",
+      "name": "10. (Test) Note for missing doctor -> 404",
+      "url": "http://localhost:3005/api/notes",
+      "method": "POST",
+      "sortNum": 28000,
+      "created": "2026-07-06T00:00:00.000Z",
+      "modified": "2026-07-06T00:00:00.000Z",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "params": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"doctorId\": 999999,\n  \"title\": \"x\",\n  \"content\": \"y\"\n}",
+        "form": []
+      }
+    }
+  ]
+}
