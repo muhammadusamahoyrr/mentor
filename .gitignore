@@ -38,3 +38,11 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Repo scope: keep only notes-service tracked (other services stay local)
+Backend/services/appointment-service/
+Backend/services/audit-service/
+Backend/services/auth-service/
+Backend/services/file-service/
+Backend/services/notification-service/
+Backend/shared/
