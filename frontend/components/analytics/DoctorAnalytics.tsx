@@ -7,9 +7,6 @@ import {
   ResponsiveContainer, Area, AreaChart,
 } from 'recharts';
 import { TrendingUp, BarChart2, PieChart as PieIcon } from 'lucide-react';
-import {
-  MOCK_MONTHLY_TREND,
-} from '@/lib/mockData';
 import { Appointment } from '@/types';
 
 /* ── Shared custom tooltip ───────────────────────────────── */
@@ -23,7 +20,7 @@ const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: 
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
           <span className="text-dim capitalize tt">{p.name}:</span>
           <span className="font-bold text-ink ml-auto tt">
-            {p.dataKey === 'revenue' ? `$${p.value.toLocaleString()}` : p.value}
+            {p.value}
           </span>
         </div>
       ))}
@@ -97,26 +94,33 @@ export default function DoctorAnalytics({ appointments = [] }: DoctorAnalyticsPr
     ];
   }, [appointments]);
 
+  // Six-month trend, built entirely from real appointments.
+  //
+  // This used to also chart "revenue", computed as `revenue += 150` — a
+  // hardcoded guess at a consultation fee. No fee, price or rate exists on any
+  // model in this system, so that money figure was invented and then rendered on
+  // a dashboard where it looked authoritative. It is gone.
+  //
+  // It also fell back to a mock array whenever there were no appointments, which
+  // showed a doctor with no bookings a chart of somebody's fictional ones.
   const monthlyTrend = useMemo(() => {
-    // Build 6-month trend from real appointments
     const today = new Date();
-    const months: { month: string; patients: number; revenue: number }[] = [];
+    const months: { month: string; patients: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      months.push({ month: MONTHS_SHORT[d.getMonth()], patients: 0, revenue: 0 });
+      months.push({ month: MONTHS_SHORT[d.getMonth()], patients: 0 });
     }
     appointments.forEach(a => {
       const apptDate = new Date(a.date);
       const diffMonths = (today.getFullYear() - apptDate.getFullYear()) * 12 + (today.getMonth() - apptDate.getMonth());
       if (diffMonths >= 0 && diffMonths < 6) {
-        const idx = 5 - diffMonths;
-        months[idx].patients++;
-        months[idx].revenue += 150; // estimate $150 per appointment
+        months[5 - diffMonths].patients++;
       }
     });
-    // If no real data yet, use MOCK_MONTHLY_TREND as example
-    return appointments.length > 0 ? months : MOCK_MONTHLY_TREND;
+    return months;
   }, [appointments]);
+
+  const hasAppointments = appointments.length > 0;
 
   return (
     <motion.div
@@ -155,7 +159,7 @@ export default function DoctorAnalytics({ appointments = [] }: DoctorAnalyticsPr
           <SectionHeader
             icon={BarChart2}
             title="Appointment Volume"
-            subtitle={activeTab === 'week' ? 'Confirmed · Pending · Completed per day (live)' : 'New patients & revenue per month'}
+            subtitle={activeTab === 'week' ? 'Confirmed · Pending · Completed per day (live)' : 'Appointments per month (live)'}
           />
           <ResponsiveContainer width="100%" height={240}>
             {activeTab === 'week' ? (
@@ -176,19 +180,13 @@ export default function DoctorAnalytics({ appointments = [] }: DoctorAnalyticsPr
                     <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.25} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id={`${uid}-gradRevenue`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#10b981" stopOpacity={0.20} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-wire)" strokeOpacity={0.5} vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: 'var(--color-ghost)', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="left"  tick={{ fill: 'var(--color-ghost)', fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--color-ghost)', fontSize: 11 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => `$${(v/1000).toFixed(0)}k`} />
+                <YAxis tick={{ fill: 'var(--color-ghost)', fontSize: 11 }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700, paddingTop: 16 }} />
-                <Area yAxisId="left"  type="monotone" dataKey="patients" name="patients" stroke="#3b82f6" strokeWidth={2} fill={`url(#${uid}-gradPatients)`} dot={{ r: 3, fill: '#3b82f6' }} />
-                <Area yAxisId="right" type="monotone" dataKey="revenue"  name="revenue"  stroke="#10b981" strokeWidth={2} fill={`url(#${uid}-gradRevenue)`}  dot={{ r: 3, fill: '#10b981' }} />
+                <Area type="monotone" dataKey="patients" name="patients" stroke="#3b82f6" strokeWidth={2} fill={`url(#${uid}-gradPatients)`} dot={{ r: 3, fill: '#3b82f6' }} />
               </AreaChart>
             )}
           </ResponsiveContainer>

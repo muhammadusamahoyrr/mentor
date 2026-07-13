@@ -1,17 +1,41 @@
 const MedicalFile = require('../models/MedicalFile');
 const axios = require('axios');
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 const { asyncHandler, AppError } = require('../../../../shared/middleware/errorHandler');
+const { UPLOAD_DIR } = require('../middleware/upload');
 
-// Upload a new file
+const CATEGORIES = ['Prescription', 'Lab Result', 'Scan'];
+
+const formatSize = (bytes) =>
+  bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(1)} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+// Upload a new file — multipart/form-data, with the real bytes.
+//
+// This used to accept JSON carrying a `fileUrl` the client made up
+// ('/mock-vault/169...-scan.pdf'). No bytes ever left the browser and nothing
+// was stored; the vault held filenames and nothing else. multer now writes the
+// actual file to disk before this runs, and `req.file` describes it.
 const uploadFile = asyncHandler(async (req, res, next) => {
-  const { fileName, fileSize, fileSizeFormatted, category, mimeType, fileUrl } = req.body;
-  
-  if (!fileName || !fileSize || !fileSizeFormatted || !category || !mimeType || !fileUrl) {
-    return next(new AppError('All fields (fileName, fileSize, fileSizeFormatted, category, mimeType, fileUrl) are required', 400));
+  if (!req.file) {
+    return next(new AppError('No file was uploaded (expected multipart field "file")', 400));
+  }
+
+  // If anything below rejects the upload, the bytes multer already wrote must
+  // not be left orphaned on disk.
+  const discard = () => fs.promises.unlink(req.file.path).catch(() => {});
+
+  const { category } = req.body;
+  if (!CATEGORIES.includes(category)) {
+    await discard();
+    return next(new AppError(`category must be one of: ${CATEGORIES.join(', ')}`, 400));
   }
 
   if (!req.user.name || !req.user.email) {
+    await discard();
     return next(new AppError('User profile incomplete. Please ensure you are logged in correctly.', 401));
   }
 
@@ -19,17 +43,76 @@ const uploadFile = asyncHandler(async (req, res, next) => {
     patientId: req.user.id,
     patientName: req.user.name,
     patientEmail: req.user.email,
-    fileName,
-    fileSize,
-    fileSizeFormatted,
+    // The name the user gave it, for display only — never used on disk.
+    fileName: req.file.originalname,
+    fileSize: req.file.size,
+    fileSizeFormatted: formatSize(req.file.size),
     category,
-    mimeType,
-    fileUrl,
-    sharedWithDoctor: false
+    mimeType: req.file.mimetype,
+    storageKey: req.file.filename,
+    sharedWithDoctor: false,
   });
 
-  await newFile.save();
+  try {
+    await newFile.save();
+  } catch (err) {
+    await discard();
+    throw err;
+  }
+
   res.status(201).json(newFile);
+});
+
+// Stream the actual bytes — GET /api/files/:id/content
+//
+// The permission check is the same one that guards the metadata: the owning
+// patient, or the doctor the file is currently shared with. Nobody else, and
+// there is no public URL to leak.
+const downloadFile = asyncHandler(async (req, res, next) => {
+  const fileId = req.params.id;
+
+  if (!mongoose.Types.ObjectId.isValid(fileId)) {
+    return next(new AppError('Invalid file ID format', 400));
+  }
+
+  const file = await MedicalFile.findById(fileId);
+  if (!file) {
+    return next(new AppError('File not found', 404));
+  }
+
+  const isPatientOwner = String(file.patientId) === String(req.user.id);
+  const isAssignedDoctor =
+    file.sharedWithDoctor && String(file.doctorId) === String(req.user.id);
+
+  if (!isPatientOwner && !isAssignedDoctor) {
+    return next(new AppError('Access denied', 403));
+  }
+
+  if (!file.storageKey) {
+    return next(
+      new AppError('This record predates real uploads and has no stored file', 410)
+    );
+  }
+
+  // Resolve and confirm the path stays inside the upload directory — belt and
+  // braces against a storageKey that somehow contains traversal.
+  const fullPath = path.resolve(UPLOAD_DIR, file.storageKey);
+  if (!fullPath.startsWith(path.resolve(UPLOAD_DIR))) {
+    return next(new AppError('Invalid storage key', 400));
+  }
+  if (!fs.existsSync(fullPath)) {
+    return next(new AppError('Stored file is missing from disk', 410));
+  }
+
+  res.setHeader('Content-Type', file.mimeType);
+  res.setHeader('Content-Length', file.fileSize);
+  // `attachment` so a stray HTML/SVG upload can never execute in our origin.
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${encodeURIComponent(file.fileName)}"`
+  );
+
+  fs.createReadStream(fullPath).pipe(res);
 });
 
 // Get all files for current user (patient or doctor)
@@ -211,21 +294,35 @@ const deleteFile = asyncHandler(async (req, res, next) => {
     return next(new AppError('Invalid file ID', 400));
   }
 
-  const file = await MedicalFile.findOne({ 
-    _id: fileId, 
-    patientId: req.user.id 
+  const file = await MedicalFile.findOne({
+    _id: fileId,
+    patientId: req.user.id
   });
-  
+
   if (!file) {
     return next(new AppError('File not found', 404));
   }
 
   await MedicalFile.deleteOne({ _id: fileId });
+
+  // Remove the bytes as well. Deleting only the record would leave the patient's
+  // medical document sitting on disk after they asked us to destroy it.
+  if (file.storageKey) {
+    const fullPath = path.resolve(UPLOAD_DIR, file.storageKey);
+    if (fullPath.startsWith(path.resolve(UPLOAD_DIR))) {
+      await fs.promises.unlink(fullPath).catch((err) => {
+        // The record is already gone; log and move on rather than 500.
+        console.error(`Could not remove ${file.storageKey} from disk:`, err.message);
+      });
+    }
+  }
+
   res.json({ message: 'File deleted successfully' });
 });
 
 module.exports = {
   uploadFile,
+  downloadFile,
   getMyFiles,
   getFileById,
   toggleShare,

@@ -4,6 +4,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const noteRoutes = require('./routes/noteRoutes');
 const doctorRoutes = require('./routes/doctorRoutes');
+const vitalRoutes = require('./routes/vitalRoutes');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -30,6 +31,11 @@ app.get('/', (req, res) =>
         'PUT /api/notes/:id',
         'DELETE /api/notes/:id',
       ],
+      vitals: [
+        'POST /api/vitals',
+        'GET /api/vitals',
+        'DELETE /api/vitals/:id',
+      ],
       note: 'All /api routes require the auth-service JWT (cookie or bearer).',
     },
   })
@@ -38,6 +44,7 @@ app.get('/', (req, res) =>
 app.get('/health', (req, res) => res.json({ status: 'healthy', service: 'notes' }));
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/vitals', vitalRoutes);
 
 // Central error handler — must be registered last.
 app.use(errorHandler);

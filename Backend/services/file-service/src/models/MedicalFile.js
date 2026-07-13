@@ -17,8 +17,18 @@ const medicalFileSchema = new mongoose.Schema({
     required: true 
   },
   mimeType: { type: String, required: true },
-  fileUrl: { type: String, required: true },
-  
+
+  // The opaque name of the real file on disk. Never exposed to the client and
+  // never derived from the user's filename — bytes are served through
+  // GET /api/files/:id/content, which checks permissions first.
+  storageKey: { type: String, required: true },
+
+  // Legacy: earlier uploads stored a fabricated '/mock-vault/...' path here and
+  // no bytes at all. Kept nullable so those rows still load; new uploads don't
+  // set it.
+  fileUrl: { type: String, default: null },
+
+
   sharedWithDoctor: { type: Boolean, default: false },
   doctorComments: { type: String, default: null },
   

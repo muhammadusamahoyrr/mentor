@@ -2,14 +2,26 @@ const express = require('express');
 const router = express.Router();
 const fileController = require('../controllers/fileController');
 const { authenticate, authorizeRole } = require('../middleware/authMiddleware');
+const { upload, handleUploadErrors } = require('../middleware/upload');
 
-// Upload file (patient only)
-router.post('/', authenticate, authorizeRole('patient'), fileController.uploadFile);
+// Upload file (patient only) — multipart/form-data with the real bytes in "file".
+router.post(
+  '/',
+  authenticate,
+  authorizeRole('patient'),
+  upload.single('file'),
+  handleUploadErrors,
+  fileController.uploadFile
+);
 
 // Get files for current user
 router.get('/my', authenticate, fileController.getMyFiles);
 
-// Get single file by ID
+// Download the actual bytes — permission-checked, no public URL.
+// Declared before '/:id' so it isn't swallowed by it.
+router.get('/:id/content', authenticate, fileController.downloadFile);
+
+// Get single file by ID (metadata)
 router.get('/:id', authenticate, fileController.getFileById);
 
 // Toggle share with doctor

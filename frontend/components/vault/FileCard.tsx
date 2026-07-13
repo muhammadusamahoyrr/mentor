@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Activity, Image, Download, Trash2, Share2, ChevronDown } from 'lucide-react';
 import { MedicalFile, User } from '@/types';
+import { downloadFileFromService } from '@/lib/auth';
 
 interface FileCardProps {
   file: MedicalFile;
@@ -20,25 +21,34 @@ const CATEGORY_CONFIG = {
 export default function FileCard({ file, doctors = [], onToggleShare, onDelete }: FileCardProps) {
   const [showDoctorSelect, setShowDoctorSelect] = useState(false);
   const [shareError, setShareError] = useState('');
+  const [isDownloading, setIsDownloading] = useState(false);
   const config = CATEGORY_CONFIG[file.category as keyof typeof CATEGORY_CONFIG] ?? CATEGORY_CONFIG.Prescription;
   const Icon = config.icon;
 
-  const handleDownload = () => {
-    const content = `==================================================
-CARELOOP MEDICAL EHR DOCUMENT VAULT
-==================================================
-Document ID:   ${file.id}
-Name:          ${file.name}
-Category:      ${file.category}
-Uploaded:      ${new Date(file.uploadedAt).toLocaleString()}
-Sharing:       ${file.sharedWithDoctor ? 'Shared with doctor' : 'Private'}
-==================================================`;
-    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name.replace(/\.[^/.]+$/, '') + '_decrypted.txt';
-    a.click();
-    URL.revokeObjectURL(url);
+  // Downloads the real document. This used to hand back a text file summarising
+  // the record's metadata, named "<name>_decrypted.txt" — which looked like a
+  // download but contained none of the file's contents, because none were stored.
+  const handleDownload = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    setShareError('');
+
+    try {
+      const blob = await downloadFileFromService(file.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name; // the real name, and the real bytes
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download failed:', err);
+      setShareError(
+        'Could not download this file. Records uploaded before the vault stored real files have no contents.'
+      );
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleToggle = () => {

@@ -117,30 +117,11 @@ export const MOCK_WEEKLY_APPOINTMENTS = [
   { day: 'Sun', confirmed: 1, pending: 0, completed: 1 },
 ];
 
-export const MOCK_MONTHLY_TREND = [
-  { month: 'Jan', patients: 38, revenue: 7200 },
-  { month: 'Feb', patients: 45, revenue: 8500 },
-  { month: 'Mar', patients: 52, revenue: 9100 },
-  { month: 'Apr', patients: 48, revenue: 8800 },
-  { month: 'May', patients: 61, revenue: 11200 },
-  { month: 'Jun', patients: 57, revenue: 10500 },
-];
-
 export const MOCK_STATUS_DISTRIBUTION = [
   { name: 'Confirmed',  value: 38, color: '#10b981' },
   { name: 'Pending',    value: 24, color: '#f59e0b' },
   { name: 'Completed',  value: 52, color: '#3b82f6' },
   { name: 'Cancelled',  value: 8,  color: '#ef4444' },
-];
-
-export const MOCK_VITALS_TREND = [
-  { date: 'Jun 1',  heartRate: 72, systolic: 118, diastolic: 76, weight: 74.2 },
-  { date: 'Jun 5',  heartRate: 75, systolic: 122, diastolic: 80, weight: 74.0 },
-  { date: 'Jun 10', heartRate: 70, systolic: 115, diastolic: 74, weight: 73.8 },
-  { date: 'Jun 15', heartRate: 68, systolic: 119, diastolic: 77, weight: 73.5 },
-  { date: 'Jun 20', heartRate: 73, systolic: 121, diastolic: 79, weight: 73.7 },
-  { date: 'Jun 25', heartRate: 71, systolic: 116, diastolic: 75, weight: 73.4 },
-  { date: 'Jun 28', heartRate: 69, systolic: 114, diastolic: 73, weight: 73.2 },
 ];
 
 export const MOCK_APPOINTMENT_HISTORY = [

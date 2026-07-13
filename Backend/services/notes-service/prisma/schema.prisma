@@ -53,3 +53,30 @@ model Note {
 
   @@index([appointmentId])
 }
+
+// A vital-sign reading recorded by a patient about themselves.
+//
+// The patient dashboard used to chart a hardcoded array of heart-rate and blood
+// pressure numbers that no service had ever stored. This is where those readings
+// actually live now.
+model Vital {
+  id Int @id @default(autoincrement())
+
+  // The auth-service user id of the patient the reading belongs to. Taken from
+  // the JWT on write, never from the request body.
+  patientId String
+
+  // When the reading was taken — which is not necessarily when it was entered.
+  recordedAt DateTime @default(now())
+
+  // Every metric is optional: a reading might be weight alone, or blood pressure
+  // alone. Validation enforces that at least one is present.
+  heartRate Int?
+  systolic  Int?
+  diastolic Int?
+  weightKg  Float?
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId, recordedAt])
+}

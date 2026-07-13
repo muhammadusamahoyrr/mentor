@@ -439,22 +439,49 @@ export const updateFileInStorage = async (file: MedicalFile): Promise<MedicalFil
 
 // ── File Upload Helper ────────────────────────────────────────
 
-export const uploadFileToService = async (fileData: {
-  fileName: string;
-  fileSize: number;
-  fileSizeFormatted: string;
-  category: string;
-  mimeType: string;
-  fileUrl: string;
-}): Promise<MedicalFile> => {
-  const res = await fetch('/api/files', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fileData),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  return transformFile(data);
+/**
+ * Uploads the actual file.
+ *
+ * This used to POST JSON containing a `fileUrl` the browser invented
+ * (`/mock-vault/1699…-scan.pdf`). No bytes were ever sent and nothing was
+ * stored — the vault held filenames pointing at a directory that did not exist.
+ * It now sends the real File as multipart/form-data.
+ *
+ * Note there is no Content-Type header set by hand: the browser must generate it
+ * so it can append the multipart boundary. Setting it manually produces a body
+ * the server cannot parse.
+ */
+export const uploadFileToService = async (
+  file: File,
+  category: string
+): Promise<MedicalFile> => {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('category', category);
+
+  const res = await fetch('/api/files', { method: 'POST', body: form });
+
+  if (!res.ok) {
+    // The vault rejects oversized files (413) and unsupported types (415) — say
+    // so, rather than falling back to a mock and pretending it worked.
+    let message = `Upload failed (HTTP ${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.message) message = body.message;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(message);
+  }
+
+  return transformFile(await res.json());
+};
+
+/** Fetches the real bytes of a stored file, permission-checked by the backend. */
+export const downloadFileFromService = async (id: string): Promise<Blob> => {
+  const res = await fetch(`/api/files/${id}/content`);
+  if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
+  return res.blob();
 };
 
 export const toggleFileShare = async (id: string, doctorId?: string, doctorName?: string): Promise<MedicalFile> => {
@@ -483,5 +510,61 @@ export const deleteFileFromService = async (id: string): Promise<void> => {
   const res = await fetch(`/api/files/${id}`, {
     method: 'DELETE',
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+};
+
+// ── Vitals ────────────────────────────────────────────────────
+
+export interface VitalReading {
+  id: number;
+  patientId: string;
+  recordedAt: string;
+  heartRate: number | null;
+  systolic: number | null;
+  diastolic: number | null;
+  weightKg: number | null;
+}
+
+export type NewVitalReading = {
+  recordedAt?: string;
+  heartRate?: number;
+  systolic?: number;
+  diastolic?: number;
+  weightKg?: number;
+};
+
+/** The caller's own readings, oldest first — charts read left to right. */
+export const getMyVitals = async (): Promise<VitalReading[]> => {
+  const res = await fetch('/api/vitals');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const list = await res.json();
+  return Array.isArray(list) ? list : [];
+};
+
+export const recordVital = async (reading: NewVitalReading): Promise<VitalReading> => {
+  const res = await fetch('/api/vitals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reading),
+  });
+
+  if (!res.ok) {
+    let message = `Could not save the reading (HTTP ${res.status})`;
+    try {
+      const body = await res.json();
+      // notes-service returns Zod's failures in `details`.
+      if (Array.isArray(body?.details) && body.details.length) message = body.details.join('; ');
+      else if (body?.error) message = body.error;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(message);
+  }
+
+  return res.json();
+};
+
+export const deleteVital = async (id: number): Promise<void> => {
+  const res = await fetch(`/api/vitals/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 };

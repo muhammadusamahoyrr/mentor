@@ -13,6 +13,9 @@ node_modules/
 *.db-journal
 *.sqlite
 
+# Uploaded medical files — real patient documents live here. Never commit them.
+Backend/services/file-service/uploads/
+
 # Prisma local DB
 **/prisma/dev.db
 

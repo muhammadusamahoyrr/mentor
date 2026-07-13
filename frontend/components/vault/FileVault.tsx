@@ -18,6 +18,7 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
   const [internalFiles, setInternalFiles] = useState<MedicalFile[]>([]);
   const [activeFilter, setActiveFilter] = useState<FileCategoryFilter>('All');
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,38 +79,20 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
       category = 'Scan';
     }
 
-    const sizeInMB = file.size / (1024 * 1024);
-    const size = sizeInMB < 0.1
-      ? `${(file.size / 1024).toFixed(1)} KB`
-      : `${sizeInMB.toFixed(1)} MB`;
-
+    setIsUploading(true);
     try {
-      const uploadedFile = await uploadFileToService({
-        fileName: file.name,
-        fileSize: file.size,
-        fileSizeFormatted: size,
-        category,
-        mimeType: file.type || 'application/octet-stream',
-        fileUrl: `/mock-vault/${Date.now()}-${file.name}`
-      });
+      // Sends the real bytes. There is no local fallback any more: pretending an
+      // upload succeeded while storing nothing is worse than saying it failed —
+      // the patient would believe their scan was safely in the vault.
+      const uploadedFile = await uploadFileToService(file, category);
       setInternalFiles(prev => [uploadedFile, ...prev]);
-      showToast(`${file.name} uploaded successfully.`);
+      showToast(`${file.name} uploaded.`);
     } catch (err) {
-      console.warn('Backend file-service offline, falling back to mock...');
-      const newFile: MedicalFile = {
-        id: `file-${Date.now()}`,
-        name: file.name,
-        size,
-        category,
-        uploadedAt: new Date().toISOString(),
-        sharedWithDoctor: false,
-        patientName: user?.name,
-        patientEmail: user?.email,
-        patientId: user?.id || 'p-demo',
-      };
-      setInternalFiles(prev => [newFile, ...prev]);
-      saveFilesForUser(user?.id || 'p-demo', [newFile, ...internalFiles]);
-      showToast(`${file.name} uploaded (local mock mode).`);
+      const message = err instanceof Error ? err.message : 'Upload failed.';
+      console.error('File upload failed:', err);
+      showToast(message);
+    } finally {
+      setIsUploading(false);
     }
   };
 
