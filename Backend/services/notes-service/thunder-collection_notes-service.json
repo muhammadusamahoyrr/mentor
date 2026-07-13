@@ -50,7 +50,7 @@
       "params": [],
       "body": {
         "type": "json",
-        "raw": "{\n  \"name\": \"Dr. House\",\n  \"email\": \"house@demo.com\",\n  \"specialization\": \"Diagnostics\"\n}",
+        "raw": "{\n  \"externalId\": \"doctor-abc-111\",\n  \"name\": \"Dr. House\",\n  \"email\": \"house@demo.com\",\n  \"specialization\": \"Diagnostics\"\n}",
         "form": []
       }
     },

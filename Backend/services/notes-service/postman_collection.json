@@ -36,6 +36,7 @@
     { "key": "token", "value": "", "type": "string" },
     { "key": "patientToken", "value": "", "type": "string" },
     { "key": "doctorId", "value": "", "type": "string" },
+    { "key": "doctorAuthId", "value": "", "type": "string" },
     { "key": "noteId", "value": "", "type": "string" },
     { "key": "appointmentId", "value": "", "type": "string" }
   ],
@@ -204,6 +205,13 @@
                   "",
                   "if (token) { pm.collectionVariables.set('token', token); }",
                   "",
+                  "// POST /api/doctors keys the row on the auth-service user id, so pull it",
+                  "// out of the JWT here — the doctor listing that also exposes it runs later.",
+                  "if (token) {",
+                  "  const claims = JSON.parse(atob(token.split('.')[1]));",
+                  "  pm.collectionVariables.set('doctorAuthId', claims.id || claims.userId);",
+                  "}",
+                  "",
                   "pm.test('captured a JWT into {{token}}', () =>",
                   "  pm.expect(pm.collectionVariables.get('token')).to.be.a('string').and.to.have.length.above(20));"
                 ]
@@ -262,7 +270,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Dr. House\",\n  \"email\": \"house-{{$timestamp}}@demo.com\",\n  \"specialization\": \"Diagnostics\"\n}",
+              "raw": "{\n  \"externalId\": \"{{doctorAuthId}}\",\n  \"name\": \"Dr. House\",\n  \"email\": \"house-{{$timestamp}}@demo.com\",\n  \"specialization\": \"Diagnostics\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {

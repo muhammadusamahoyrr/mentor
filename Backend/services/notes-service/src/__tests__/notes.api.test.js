@@ -94,9 +94,41 @@ describe('role-based authorization', () => {
     const res = await request(app)
       .post('/api/doctors')
       .set(docAuth())
-      .send({ name: 'Dr. New', email: 'new@example.com', specialization: 'Cardio' });
+      .send({ externalId: 'auth-new-1', name: 'Dr. New', email: 'new@example.com', specialization: 'Cardio' });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Dr. New');
+    expect(res.body.externalId).toBe('auth-new-1');
+  });
+
+  it('rejects a doctor with no externalId (400)', async () => {
+    const res = await request(app)
+      .post('/api/doctors')
+      .set(docAuth())
+      .send({ name: 'Dr. Rootless', email: 'rootless@example.com' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/externalId/i);
+  });
+
+  // The bug this endpoint used to have: a row created here carried no
+  // externalId, so the note flow's upsert (keyed on externalId) could not see
+  // it and made a second row for the same doctor. Registering the same person
+  // twice must converge on one row, not accumulate them.
+  it('registering the same doctor twice keeps a single row', async () => {
+    const send = (specialization) => request(app)
+      .post('/api/doctors')
+      .set(docAuth())
+      .send({ externalId: 'auth-dup-1', name: 'Dr. Twice', email: 'twice@example.com', specialization });
+
+    const first = await send('Cardio');
+    const second = await send('Neuro');
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.id).toBe(first.body.id);
+    expect(second.body.specialization).toBe('Neuro');
+
+    const rows = await prisma.doctor.findMany({ where: { externalId: 'auth-dup-1' } });
+    expect(rows).toHaveLength(1);
   });
 });
 

@@ -46,7 +46,7 @@ npm start        # http://localhost:3005
 
 | Method | URL | Description |
 |---|---|---|
-| POST | `/api/doctors` | Create a doctor |
+| POST | `/api/doctors` | Create or update a doctor. Requires `externalId` (the auth-service user id), `name`, `email`. Upserts on `externalId`, the same key the consultation-note flow uses, so one doctor never ends up split across two rows. |
 | GET | `/api/doctors` | List doctors **with their notes** (relationship) |
 | POST | `/api/notes` | Create a note (validated, must reference an existing doctor) |
 | GET | `/api/notes` | List notes (`?doctorId=` to filter) |
