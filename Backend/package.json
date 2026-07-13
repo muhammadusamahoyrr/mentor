@@ -1,0 +1,9 @@
+{
+  "name": "smart-healthcare-backend",
+  "private": true,
+  "description": "Runs the backend microservices together. Each service keeps its own package.json and dependencies.",
+  "scripts": {
+    "dev": "node dev.js",
+    "start": "node dev.js"
+  }
+}
