@@ -1,9 +1,27 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { login, register, getCurrentUser } from '../lib/auth';
+
+// These tests cover the offline fallback in lib/auth: when the backend is
+// unreachable, register/login/getCurrentUser fall back to localStorage.
+//
+// They used to reach the network for real and pass only because nothing happened
+// to be listening on the dev port — so they broke the moment a connection to a
+// dead port started hanging instead of being refused. A unit test must not
+// depend on that. Stubbing the HTTP layer makes "the backend is unreachable" an
+// explicit precondition rather than an accident of the machine.
+vi.mock('../lib/api', () => ({
+  default: {
+    get: vi.fn(() => Promise.reject(new Error('Network Error'))),
+    post: vi.fn(() => Promise.reject(new Error('Network Error'))),
+  },
+}));
 
 describe('auth utilities', () => {
   beforeEach(() => {
     localStorage.clear();
+    // The bare fetch() calls in lib/auth (appointments, notifications, files)
+    // must fail the same way, without touching the network.
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Network Error'))));
   });
 
   describe('register', () => {

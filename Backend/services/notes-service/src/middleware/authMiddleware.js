@@ -3,8 +3,11 @@ const { verifyToken } = require('../utils/jwt');
 // Reads the JWT minted by auth-service. The Next.js BFF forwards it both as a
 // cookie and as a bearer token, so accept either.
 exports.authenticate = (req, res, next) => {
+  // An explicit Authorization header states intent; a cookie is sent ambiently by
+  // the browser. When both are present the header must win, otherwise a stale
+  // cookie silently overrides the token the caller actually chose to send.
   const token =
-    req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    req.headers.authorization?.split(' ')[1] || req.cookies?.token;
 
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });

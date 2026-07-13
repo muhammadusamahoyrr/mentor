@@ -9,6 +9,23 @@
     "type": "bearer",
     "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Logging in sets a `token` cookie, and cookies are scoped by domain, not by",
+          "// port -- so after 'Login as patient' the jar would send a PATIENT cookie to",
+          "// notes-service on :3006 alongside whatever bearer token the request meant to",
+          "// use. Clearing the jar before every request makes the bearer token the only",
+          "// thing authenticating, so 'run as the doctor' really means the doctor.",
+          "const jar = pm.cookies.jar();",
+          "jar.clear(pm.collectionVariables.get('baseUrl'), () => {});"
+        ]
+      }
+    }
+  ],
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3006", "type": "string" },
     { "key": "authUrl", "value": "http://localhost:3001", "type": "string" },
@@ -421,7 +438,37 @@
           ]
         },
         {
-          "name": "7. Delete note",
+          "name": "7a. Patient tries to delete the note -> 403 (role-based rule)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{patientToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/notes/{{noteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notes", "{{noteId}}"]
+            },
+            "description": "Role-based authorization. DELETE is restricted to the doctor role: a clinical record is not patient-destroyable. This is a rule about the *role*, distinct from the ownership check — a patient is refused even for a note they wrote themselves."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('says which role is required', () =>",
+                  "  pm.expect(pm.response.json().error).to.match(/requires the role doctor/i));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7b. Delete note (as doctor)",
           "request": {
             "method": "DELETE",
             "header": [],
@@ -429,14 +476,24 @@
               "raw": "{{baseUrl}}/api/notes/{{noteId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "notes", "{{noteId}}"]
-            }
+            },
+            "description": "The same request the patient was just refused. The role check passes, and the author check in the controller passes too, so the note is removed."
           },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('the note the patient could not delete is now gone', () => {",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/notes/' + pm.collectionVariables.get('noteId'),",
+                  "    method: 'GET',",
+                  "    header: { Authorization: 'Bearer ' + pm.collectionVariables.get('token') }",
+                  "  }, (err, res) => { if (!err) pm.expect(res.code).to.eql(404); });",
+                  "});"
+                ]
               }
             }
           ]
@@ -573,6 +630,41 @@
       "name": "Negative tests",
       "description": "The failure modes worth demonstrating: authentication, authorisation, validation and the foreign-key constraint.",
       "item": [
+        {
+          "name": "10b. Patient registers a doctor -> 403 (role-based rule)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{patientToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Not A Real Doctor\",\n  \"email\": \"impostor-{{$timestamp}}@demo.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/doctors",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "doctors"]
+            },
+            "description": "The second role-based rule: only a clinician may register a doctor record. A valid, authenticated patient token is still refused — authentication is not authorization."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('authenticated but not authorized', () =>",
+                  "  pm.expect(pm.response.json().error).to.match(/requires the role doctor/i));"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "11. Unscoped list -> 400",
           "request": {
