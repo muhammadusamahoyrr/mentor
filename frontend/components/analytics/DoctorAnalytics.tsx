@@ -120,8 +120,6 @@ export default function DoctorAnalytics({ appointments = [] }: DoctorAnalyticsPr
     return months;
   }, [appointments]);
 
-  const hasAppointments = appointments.length > 0;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}

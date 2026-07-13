@@ -4,7 +4,6 @@ import { vi } from 'vitest';
 
 // Mock framer-motion so animation props don't fail in jsdom
 vi.mock('framer-motion', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react');
 
   const make = (tag: string) =>

@@ -216,7 +216,7 @@ export const saveAppointment = async (appointment: Partial<Appointment>): Promis
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return data;
-  } catch (err) {
+  } catch {
     console.warn('Appointment service offline, saving mock appointment...');
     const appt: Appointment = {
       id: appointment.id || `appt-${Date.now()}`,
@@ -249,7 +249,7 @@ export const updateAppointmentStatus = async (id: string, status: Appointment['s
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch (err) {
+  } catch {
     console.warn('Appointment service offline, updating mock status...');
     if (typeof window !== 'undefined') {
       const existing = safeJsonParse<Appointment[]>(localStorage.getItem(APPOINTMENTS_KEY), []);
@@ -268,7 +268,7 @@ export const getAppointmentsForPatient = async (userId: string): Promise<Appoint
     const res = await fetch('/api/appointments/my');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch (err) {
+  } catch {
     console.warn('Appointment service offline, reading mock patient appointments...');
     if (typeof window === 'undefined') return DEMO_PATIENT_IDS.has(userId) ? MOCK_APPOINTMENTS_PATIENT : [];
     const saved = safeJsonParse<Appointment[]>(localStorage.getItem(APPOINTMENTS_KEY), []);
@@ -283,7 +283,7 @@ export const getAppointmentsForDoctor = async (userId: string): Promise<Appointm
     const res = await fetch('/api/appointments/my');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch (err) {
+  } catch {
     console.warn('Appointment service offline, reading mock doctor appointments...');
     if (typeof window === 'undefined') return userId === DEMO_DOCTOR_ID ? MOCK_APPOINTMENTS_DOCTOR : [];
     const saved = safeJsonParse<Appointment[]>(localStorage.getItem(APPOINTMENTS_KEY), []);
@@ -319,7 +319,7 @@ export const getNotificationsForUser = async (userId: string): Promise<AppNotifi
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
     return Array.isArray(list) ? list.map(transformNotification) : [];
-  } catch (err) {
+  } catch {
     console.warn('Notification service offline, reading mock user notifications...');
     if (typeof window === 'undefined') return DEMO_PATIENT_IDS.has(userId) ? MOCK_NOTIFICATIONS : [];
     const saved = safeJsonParse<AppNotification[]>(localStorage.getItem(NOTIFICATIONS_KEY), []);
@@ -332,7 +332,7 @@ export const getNotificationsForUser = async (userId: string): Promise<AppNotifi
 export const markNotificationRead = async (id: string): Promise<void> => {
   try {
     await fetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
-  } catch (err) {
+  } catch {
     console.warn('Notification service offline, marking mock notification as read...');
     if (typeof window === 'undefined') return;
     const existing = safeJsonParse<AppNotification[]>(localStorage.getItem(NOTIFICATIONS_KEY), []);
@@ -347,7 +347,7 @@ export const markNotificationRead = async (id: string): Promise<void> => {
 export const markAllNotificationsRead = async (userId: string): Promise<void> => {
   try {
     await fetch('/api/notifications/mark-all-read', { method: 'PATCH' });
-  } catch (err) {
+  } catch {
     console.warn('Notification service offline, marking all mock notifications as read...');
     if (typeof window === 'undefined') return;
     const existing = safeJsonParse<AppNotification[]>(localStorage.getItem(NOTIFICATIONS_KEY), []);
@@ -366,7 +366,7 @@ export const getFilesForUser = async (userId: string): Promise<MedicalFile[]> =>
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
     return Array.isArray(list) ? list.map(transformFile) : [];
-  } catch (err) {
+  } catch {
     console.warn('File service offline, reading mock user files...');
     if (typeof window === 'undefined') return DEMO_PATIENT_IDS.has(userId) ? MOCK_FILES : [];
     const store = safeJsonParse<FileStore>(localStorage.getItem(FILES_KEY), {});
@@ -377,20 +377,13 @@ export const getFilesForUser = async (userId: string): Promise<MedicalFile[]> =>
   }
 };
 
-export const saveFilesForUser = async (userId: string, files: MedicalFile[]): Promise<void> => {
-  if (typeof window === 'undefined') return;
-  const store = safeJsonParse<FileStore>(localStorage.getItem(FILES_KEY), {});
-  store[userId] = files;
-  localStorage.setItem(FILES_KEY, JSON.stringify(store));
-};
-
 export const getFilesSharedWithDoctor = async (): Promise<MedicalFile[]> => {
   try {
     const res = await fetch('/api/files/my');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const list = await res.json();
     return Array.isArray(list) ? list.map(transformFile) : [];
-  } catch (err) {
+  } catch {
     console.warn('File service offline, reading mock shared doctor files...');
     if (typeof window === 'undefined') return MOCK_FILES.filter(f => f.sharedWithDoctor);
     const store = safeJsonParse<FileStore>(localStorage.getItem(FILES_KEY), {});
@@ -402,39 +395,24 @@ export const getFilesSharedWithDoctor = async (): Promise<MedicalFile[]> => {
 };
 
 export const updateFileInStorage = async (file: MedicalFile): Promise<MedicalFile> => {
-  try {
-    const url = file.doctorComments !== undefined && file.doctorComments !== null
-      ? `/api/files/${file.id}/comments`
-      : `/api/files/${file.id}/share`;
+  const isComment = file.doctorComments !== undefined && file.doctorComments !== null;
 
-    const body = file.doctorComments !== undefined && file.doctorComments !== null
-      ? { comments: file.doctorComments }
-      : { doctorId: file.doctorId, doctorName: file.doctorName };
+  const url = isComment ? `/api/files/${file.id}/comments` : `/api/files/${file.id}/share`;
+  const body = isComment
+    ? { comments: file.doctorComments }
+    : { doctorId: file.doctorId, doctorName: file.doctorName };
 
-    const res = await fetch(url, {
-      method: file.doctorComments !== undefined && file.doctorComments !== null ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    return transformFile(data);
-  } catch (err) {
-    console.warn('File service offline, updating mock file local status...');
-    if (typeof window !== 'undefined' && file.patientId) {
-      const store = safeJsonParse<FileStore>(localStorage.getItem(FILES_KEY), {});
-      const userFiles = store[file.patientId] ?? (DEMO_PATIENT_IDS.has(file.patientId) ? [...MOCK_FILES] : []);
-      const idx = userFiles.findIndex(f => f.id === file.id);
-      if (idx !== -1) {
-        userFiles[idx] = file;
-      } else {
-        userFiles.unshift(file);
-      }
-      store[file.patientId] = userFiles;
-      localStorage.setItem(FILES_KEY, JSON.stringify(userFiles));
-    }
-    return file;
-  }
+  // This write has no local fallback, for the same reason uploads don't: a
+  // clinical note that only ever reached this browser's localStorage is a note
+  // the patient will never see. Throw, and let the caller say so, rather than
+  // return `file` as though the server had accepted it.
+  const res = await fetch(url, {
+    method: isComment ? 'POST' : 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return transformFile(await res.json());
 };
 
 // ── File Upload Helper ────────────────────────────────────────

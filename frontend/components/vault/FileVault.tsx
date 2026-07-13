@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, FolderOpen, CheckCircle } from 'lucide-react';
 import { User, MedicalFile } from '@/types';
-import { getCurrentUser, getFilesForUser, saveFilesForUser, uploadFileToService, toggleFileShare, deleteFileFromService } from '@/lib/auth';
+import { getCurrentUser, getFilesForUser, uploadFileToService, toggleFileShare, deleteFileFromService } from '@/lib/auth';
 import FileCard from './FileCard';
 import FileFilters, { FileCategoryFilter } from './FileFilters';
 import FileDropzone from './FileDropzone';
@@ -25,9 +25,6 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
 
   // When external state is provided (doctor page lifts state), use it; otherwise own state.
   const files = (externalFiles && user?.role === 'doctor') ? externalFiles : internalFiles;
-  const setFiles = (externalFiles && user?.role === 'doctor' && onExternalFilesChange)
-    ? onExternalFilesChange
-    : setInternalFiles;
 
   const showToast = (msg: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -58,16 +55,6 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
-
-  const persistFiles = (updater: (prev: MedicalFile[]) => MedicalFile[]) => {
-    if (user?.role === 'patient') {
-      const next = updater(internalFiles);
-      saveFilesForUser(user.id, next);
-      setInternalFiles(next);
-    } else {
-      setFiles(updater);
-    }
-  };
 
   const handleFileAccepted = async (file: File) => {
     let category: 'Prescription' | 'Lab Result' | 'Scan' = 'Prescription';
@@ -104,13 +91,13 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
         onExternalFilesChange(prev => prev.map(f => f.id === id ? updated : f));
       }
       showToast(updated.sharedWithDoctor ? 'Shared file with doctor.' : 'Unshared file.');
-    } catch {
-      console.warn('Backend file share offline, falling back to mock...');
-      persistFiles(prev => prev.map(f =>
-        f.id === id
-          ? { ...f, sharedWithDoctor: !f.sharedWithDoctor, doctorId, doctorName }
-          : f
-      ));
+    } catch (err) {
+      // Same rule the upload path follows: flipping the toggle locally would
+      // tell the patient their record is now with their doctor when the server
+      // never recorded it — the one belief they must not be given falsely.
+      const message = err instanceof Error ? err.message : 'Could not update sharing.';
+      console.error('File share failed:', err);
+      showToast(message);
     }
   };
 
@@ -123,9 +110,12 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
         onExternalFilesChange(prev => prev.filter(f => f.id !== id));
       }
       showToast('Document deleted successfully.');
-    } catch {
-      console.warn('Backend file delete offline, deleting locally...');
-      persistFiles(prev => prev.filter(f => f.id !== id));
+    } catch (err) {
+      // Dropping it from the local list would hide a document that is still on
+      // the server: the patient thinks it is gone, and it is not.
+      const message = err instanceof Error ? err.message : 'Could not delete the document.';
+      console.error('File delete failed:', err);
+      showToast(message);
     }
   };
 
@@ -188,7 +178,7 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
       <div className="grid md:grid-cols-3 gap-8 items-start">
         {user?.role === 'patient' && (
           <div className="md:col-span-1">
-            <FileDropzone onFileAccepted={handleFileAccepted} />
+            <FileDropzone onFileAccepted={handleFileAccepted} disabled={isUploading} />
           </div>
         )}
         <div className={`flex flex-col gap-6 w-full ${user?.role === 'patient' ? 'md:col-span-2' : 'md:col-span-3'}`}>

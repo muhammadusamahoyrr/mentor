@@ -5,6 +5,7 @@ import { UploadCloud, AlertCircle } from 'lucide-react';
 
 interface FileDropzoneProps {
   onFileAccepted: (file: File) => void;
+  disabled?: boolean;
 }
 
 const ALLOWED_TYPES = [
@@ -14,7 +15,7 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 
-export default function FileDropzone({ onFileAccepted }: FileDropzoneProps) {
+export default function FileDropzone({ onFileAccepted, disabled = false }: FileDropzoneProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +38,9 @@ export default function FileDropzone({ onFileAccepted }: FileDropzoneProps) {
   };
 
   const processFile = (file: File) => {
+    // An upload is already in flight — a second one would race it and the vault
+    // would show whichever finished last.
+    if (disabled) return;
     if (errorTimerRef.current) { clearTimeout(errorTimerRef.current); errorTimerRef.current = null; }
     setErrorMsg(null);
     if (!ALLOWED_TYPES.includes(file.type)) {
@@ -60,21 +64,26 @@ export default function FileDropzone({ onFileAccepted }: FileDropzoneProps) {
   return (
     <div className="w-full flex flex-col gap-3">
       <motion.div
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => { if (!disabled) fileInputRef.current?.click(); }}
         onDragEnter={handleDrag}
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-[2rem] p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 min-h-[180px] bg-panel hover:bg-lift tt ${
-          isDragActive
-            ? 'border-brand bg-brand-muted/30 scale-[0.99] ring-4 ring-brand/10'
-            : 'border-wire hover:border-dim'
+        className={`relative border-2 border-dashed rounded-[2rem] p-8 flex flex-col items-center justify-center text-center transition-all duration-300 min-h-[180px] bg-panel tt ${
+          disabled
+            ? 'border-wire opacity-60 cursor-not-allowed'
+            : `cursor-pointer hover:bg-lift ${
+                isDragActive
+                  ? 'border-brand bg-brand-muted/30 scale-[0.99] ring-4 ring-brand/10'
+                  : 'border-wire hover:border-dim'
+              }`
         }`}
       >
         <input
           ref={fileInputRef}
           type="file"
           className="hidden"
+          disabled={disabled}
           onChange={e => { if (e.target.files?.[0]) processFile(e.target.files[0]); }}
           accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
         />
@@ -91,7 +100,7 @@ export default function FileDropzone({ onFileAccepted }: FileDropzoneProps) {
         </motion.div>
 
         <h3 className="font-bold text-ink text-base tt">
-          {isDragActive ? 'Drop your file here' : 'Upload Medical Document'}
+          {disabled ? 'Uploading…' : isDragActive ? 'Drop your file here' : 'Upload Medical Document'}
         </h3>
         <p className="text-ghost text-sm mt-1 max-w-sm tt">
           Drag & drop here or{' '}
