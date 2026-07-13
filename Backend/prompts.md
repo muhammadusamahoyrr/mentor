@@ -435,6 +435,160 @@ unchanged. It's not enough that the attacker got a 403 — the data has to still
 
 ---
 
+## Day 5 — Re-auditing the whole repo
+
+### Prompt 21
+
+> Check again if you missed any task or any issue or error in the repo, especially the Week 3 wiring.
+
+**What I was doing:** Not trusting "it's done". Asking for a second pass over work that had already
+been declared finished and pushed.
+
+**What I learned:** It found **four problems, two of which the AI itself had introduced** — which is
+the whole argument for asking again.
+
+1. **A real auth bug.** Every service read the token as
+   `req.cookies?.token || req.headers.authorization`, so an **ambient cookie beat an explicit bearer
+   token**. Running the Postman collection exposed it: after "log in as patient", the cookie jar sent
+   a *patient* cookie to notes-service on `:3006` alongside the *doctor's* bearer token — and the
+   cookie won. Every doctor-authenticated request was silently downgraded to the patient and 403'd.
+   This is the *same* domain-vs-port cookie trap from Prompt 19, biting a second time in a different
+   costume. An `Authorization` header is a deliberate statement of intent; a cookie is sent
+   ambiently. **The header must win.** Fixed in all five services.
+2. **I had broken five test suites.** Hardening `jwt.js` to throw when `JWT_SECRET` is missing means
+   it throws *at import*, and **Jest does not read `.env`** — so auth-, notification- and
+   file-service could not even load their test files. Each needed a `jest.setup.js` supplying
+   test-only secrets.
+3. **I had broken a fresh clone.** notification-service refuses to start without
+   `INTERNAL_SERVICE_TOKEN` (deliberately — better to die than leave the event endpoint open), but no
+   `.env.example` mentioned it.
+4. **The frontend "unit" tests were not unit tests.** They made real network calls and passed only
+   because nothing happened to be listening on the dev port. When a connection to a dead port started
+   *hanging* instead of being refused, all nine timed out. Stubbing the HTTP layer made "the backend
+   is unreachable" an explicit precondition instead of an accident of the machine.
+
+The theme: **a security fix and a test suite can be in direct tension.** Making a module fail loudly
+on a missing secret is right, and it broke every test that imported it. Neither is wrong — the tests
+just have to say what they assume.
+
+---
+
+## Day 6 — Making the dashboards tell the truth
+
+### Prompt 22
+
+> Fix the analytics mock data and the file upload.
+
+**What I was doing:** Removing the last of the fake data from the app.
+
+**What I learned:** The most useful thing here happened *before* any code: the AI came back and said
+this was two different problems, not one, and that **one of them was a product decision I had to
+make, not a bug it could fix.**
+
+The audit was precise about what was actually fake:
+
+- Most of the analytics were **already real** — the weekly chart, status distribution and monthly
+  patient counts all derive from genuine appointments.
+- **Revenue was `revenue += 150`** — a hardcoded guess at a consultation fee. No fee, price or rate
+  exists on any model in the system.
+- **Vitals were entirely fictional.** Heart rate, blood pressure and weight came from a hardcoded
+  array. *No service had ever stored a vital sign.*
+
+Those two fakes are not the same and should not be fixed the same way:
+
+| | What it was | What I chose | Why |
+|---|---|---|---|
+| Revenue | Invented money | **Delete the series** | A fabricated *financial* figure is the most misleading thing on a dashboard: it looks authoritative and is fiction. Inventing a fee field to justify the chart would be building a product feature to rescue a lie. |
+| Vitals | Invented health data | **Build the feature for real** | The chart is genuinely useful — it just needed something behind it. |
+
+The line I took from this: **"the chart looks empty" is not a reason to fill it with fiction.** An
+honest empty state ("No readings yet — record one") beats a beautiful chart of numbers that belong to
+nobody. Charting invented blood-pressure figures *at a patient, as their own health data*, is the
+kind of bug that would matter in a real clinic.
+
+**The Vital resource.** A new Prisma model in notes-service, so it reuses the ORM, JWT auth and BFF
+proxy already built in Week 2/3 — plus a migration, `POST`/`GET`/`DELETE`, and a "Record" form on the
+dashboard. Design points worth keeping:
+
+- **`patientId` comes from the JWT, never the body.** A test asserts that sending someone else's id
+  in the payload is ignored.
+- **Reads are scoped to the caller** — there is no `patientId` query parameter to tamper with.
+- **Another role rule:** only a `patient` may record a vital (a doctor has no "own vitals" here).
+- **Every metric is nullable, and validation requires at least one.** A weight-only entry is a
+  legitimate reading, and it must store `null` for heart rate — **not `0`**, which would plot as a
+  patient whose heart had stopped.
+- Blood pressure is validated as a *pair* (both halves, systolic above diastolic), and physiologically
+  impossible values are rejected — that catches a typo, or lbs entered as kg.
+
+### Prompt 23
+
+> (same prompt — the file-upload half)
+
+**What I learned:** The vault **was not storing files at all**. The browser POSTed JSON containing a
+`fileUrl` it had *invented* (`/mock-vault/1699…-scan.pdf`); no bytes ever left the page. "Download"
+then handed back a text file summarising the record's metadata, named `<name>_decrypted.txt` — it
+*looked* like a download and contained none of the document.
+
+Making it real meant multipart uploads (multer), bytes on disk, and a permission-checked
+`GET /api/files/:id/content` to stream them back. Four things I would not have thought of unprompted:
+
+1. **The BFF proxy would have silently destroyed every file.** It did `await request.text()` on the
+   way up and `await response.text()` on the way down — **decoding binary as UTF-8**. Every byte
+   sequence that isn't valid UTF-8 gets replaced with `U+FFFD`, so every PDF and JPEG would arrive
+   quietly corrupted. It only ever "worked" because no real bytes were being sent. `arrayBuffer()`
+   both directions fixes it.
+2. **Never trust the client's filename on disk.** It can contain `../`, a null byte, or collide with
+   another patient's file. The original name is kept in Mongo *for display*; on disk the file gets an
+   opaque random name.
+3. **Delete must remove the bytes too.** Deleting only the database row leaves the patient's medical
+   document sitting on disk after they asked us to destroy it.
+4. **Drop the mock fallback.** It used to catch an upload failure and store a fake local record.
+   Telling a patient their scan is safely in the vault when nothing was stored is *worse* than an
+   error message.
+
+**How I proved it, and why the proof matters.** A "200 OK" proves nothing about a file upload — the
+old code returned 200 too. So the test uploads a **binary PDF stuffed with deliberately invalid UTF-8
+sequences**, downloads it back through the BFF, and compares **SHA-256 hashes**. Identical hash, or it
+didn't work. That is the assertion the old UTF-8 bug would have failed, and no status-code check ever
+would.
+
+---
+
+## Day 7 — The bug that wasn't in my code
+
+### Prompt 24
+
+> Fix the mongodb srv dns issue.
+
+**What I was doing:** Every Mongo-backed service kept dying at boot with `queryTxt ETIMEOUT`,
+intermittently, for days.
+
+**What I learned:** `mongodb+srv://` is not just a prettier URI — it makes the driver perform **two**
+DNS lookups: an **SRV** record for the host list *and* a **TXT** record for the replicaSet name and
+auth options. On some networks the TXT lookup times out while ordinary A records resolve perfectly.
+When that happens, four services die with an error that **looks nothing like a DNS problem**.
+
+The trap: by the time I asked, I had changed networks and it had "fixed itself". The tempting
+conclusion was that there had never been a bug. The right conclusion was that it would come back the
+moment I reconnected to the other network.
+
+The fix is the **standard (non-SRV) connection string**, which spells out the hosts and replicaSet
+that the SRV/TXT records would have supplied, and so needs only A-record lookups. Getting those two
+values without a working TXT lookup is the neat part — **ask the server itself**: `db.hello().hosts`
+and `db.hello().setName`.
+
+Two things I want to remember:
+
+- **Prove the fix against the failure, not against a working network.** Verifying on today's good
+  Wi-Fi would have proved nothing. The check sabotages `dns.resolveSrv`/`resolveTxt` to fail exactly
+  as the bad resolver did: `mongodb+srv://` fails as before, and the standard URI still connects and
+  finds the writable primary.
+- **State the trade-off out loud.** The hostnames are now pinned, so the string must be regenerated
+  if the cluster is ever migrated — which is precisely the problem SRV exists to solve. It is a trade,
+  not a free win, and it belongs in the comment next to the setting.
+
+---
+
 ## Summary — Week 3
 
 | # | Prompt Category | Key Concept Covered |
@@ -446,12 +600,29 @@ unchanged. It's not enough that the attacker got a 403 — the data has to still
 | 18 | Adversarial review | Asking the AI to re-check itself found a real shipped bug |
 | 19 | API client | Cookies are domain-scoped, not port-scoped |
 | 20 | **API + integration tests** | supertest, isolated test DB, real migrations, negative assertions |
+| 21 | Re-audit | An explicit header must beat an ambient cookie; a security fix can break the tests |
+| 22 | **Honest data** | Empty state > invented data. Build the feature, or delete the chart — never fake it |
+| 23 | **Real file uploads** | multipart, binary-safe proxying, SHA-256 as the only proof that bytes survived |
+| 24 | Infrastructure | `mongodb+srv://` needs SRV **and** TXT; prove a fix against the failure, not around it |
 
-**Total significant prompts logged: 20** (13 in Week 2, 7 in Week 3)
+**Total significant prompts logged: 24** (13 in Week 2, 11 in Week 3)
 
-**Week 3 deliverable:** `notes-service` now has **JWT authentication** on every `/api` route, a
-**role-based authorization rule** (`DELETE` is doctors-only) layered on top of ownership and
-appointment-participant checks, and it is **wired to the Week 1 frontend** — the video-call page
-performs full Create / Read / Update / Delete against it with a real login. Covered by **31 backend
-tests**: Zod unit tests, API tests over supertest (auth, RBAC, CRUD, error paths), and an
-integration test that runs the happy path across a live service boundary.
+**Week 3 deliverable:** `notes-service` has **JWT authentication** on every `/api` route and
+**role-based authorization** (`DELETE` a note is doctors-only; recording a vital is patients-only)
+layered on top of ownership and appointment-participant checks. It is **wired to the Week 1
+frontend**: the video-call page performs full Create / Read / Update / Delete against it with a real
+login. The last of the fake data is gone — the **Vital** resource means the patient dashboard charts
+readings the patient actually recorded (with an honest empty state when they have none), the
+fabricated revenue series is deleted, and the file vault stores and returns **real bytes**, verified
+by SHA-256 across the round trip.
+
+Covered by **80 backend tests** (Zod unit tests; API tests over supertest for auth, RBAC, CRUD and
+error paths; an integration test across a live service boundary; and the vitals suite), **20 frontend
+tests**, and a **41-assertion Postman collection** that demonstrates both role rules against running
+services. Lint and typecheck clean throughout.
+
+**The lesson I would keep from Week 3**, above any particular API: the AI is very good at making
+something *look* finished, and quite willing to fill a gap with something plausible — a mock array, a
+`$150` estimate, a `/mock-vault/` path, a status code that says 200 while the bytes are gone. Every
+one of those passed a casual review. What caught them was asking for the *evidence* rather than the
+result: which line reads this? compare the hashes. show me the branch the tests never executed.
