@@ -1,9 +1,11 @@
-# prompts.md — Week 1 Prompt Log
+# prompts.md — Week 1 & Week 3 Prompt Log (Frontend)
 **Intern:** Muhammad Usama  
 **Program:** Arbisoft AI-Focused Internship 2026  
-**Week:** 1 — Frontend Fundamentals  
+**Weeks:** 1 — Frontend Fundamentals · 3 — Wiring the frontend to the backend  
 
-This file documents every significant prompt I used while building the CareLoop frontend during Week 1. Prompts are logged in the order I used them, along with a short note on what I was trying to do and what I learned from the result.
+This file documents every significant prompt I used while building the CareLoop frontend. **Week 1** built the UI against mock data and `localStorage`; **[Week 3](#week-3--wiring-the-frontend-to-the-backend)** is where it met a real backend. Prompts are logged in the order I used them, along with a short note on what I was trying to do and what I learned from the result.
+
+Week 2 was backend-only — its log, and the backend half of Week 3, live in `Backend/prompts.md`.
 
 ---
 
@@ -335,7 +337,7 @@ This file documents every significant prompt I used while building the CareLoop 
 
 ---
 
-## Summary
+## Summary — Week 1
 
 | # | Prompt Category | Key Concept Covered |
 |---|---|---|
@@ -352,3 +354,178 @@ This file documents every significant prompt I used while building the CareLoop 
 | 27–30 | Polish | Tailwind tokens, notifications, CORS, accessibility |
 
 **Total significant prompts logged: 30**
+
+---
+---
+
+# Week 3 — Wiring the Frontend to the Backend
+
+**Week:** 3 — Auth, Authorization, API Tests & Integration (the frontend half)
+
+Week 1 built the UI against `localStorage` and mock data. Week 3 is where it meets a real backend —
+and where I found out how much of the "working" app was only pretending to work. The backend log
+lives in `Backend/prompts.md`; this file covers what changed on the client.
+
+---
+
+## Day 1 — Finding out what was actually connected
+
+### Prompt 31
+> As a senior full stack developer, list the remaining wiring between the frontend and the backend
+> services. Check deeply whether each service is connected to the frontend or not.
+
+**What I was doing:** Auditing before building, instead of assuming my own code worked.
+
+**What I learned:** A BFF proxy existing is **not** the same as a feature being wired.
+`lib/notesServiceProxy.ts` and `app/api/notes/[[...path]]/route.ts` both existed and were correct —
+and **not one line of frontend code ever called `/api/notes`**. The video page was saving its notes to
+a *different* service entirely.
+
+The audit also caught how much of the app was quietly running on mocks. `lib/auth.ts` catches almost
+any backend failure and silently falls back to `localStorage`, so **a completely dead backend still
+looks like a working app.** That is a nice demo and a terrible way to develop: you cannot tell a
+wired feature from an unwired one by clicking around. The only reliable check is to grep for the
+caller.
+
+---
+
+## Day 2 — Real CRUD from the UI
+
+### Prompt 32
+> Wire the video page notes to notes-service.
+
+**What I was doing:** The Week 3 requirement — full Create / Read / Update / Delete from the frontend,
+against a real authenticated API.
+
+**What I learned:** The client change looks small (`fetch('/api/notes')` instead of
+`/api/appointments/:id/notes`) but the interesting part is what the **BFF proxy** is for. The browser
+only ever talks to same-origin `/api/*` routes; the Next server attaches the httpOnly cookie and
+forwards to the service. That means:
+
+- the browser never learns where the services actually live, and
+- **the frontend never handles the JWT itself.** It cannot: the cookie is `httpOnly`, so JavaScript
+  cannot read it. That is the point.
+
+That last fact is what made me delete `NEXT_PUBLIC_JWT_SECRET` from `.env.local`. Any
+`NEXT_PUBLIC_*` variable is inlined into the client bundle the moment one line of code references it —
+so a *signing secret* under that prefix is a loaded gun. The frontend signs and verifies nothing, so
+it has no business holding one.
+
+### Prompt 33
+> Fix the duplicate notes on save.
+
+**What I was doing:** Every visit to the consultation room added another copy of the same note.
+
+**What I learned:** The page loaded your last note into the textarea, but Save always issued a
+`POST` — so opening the room and clicking Save duplicated it. The fix is to track **which** note the
+editor is holding (`editingNoteId`) and `PUT` when it already exists.
+
+Digging into it turned up a **second bug hiding behind the first**: the editor was pre-filled from
+`notes[0]` — the newest note by *anyone*. A patient opening the room would find the **doctor's** note
+sitting in their editor. The lesson: when a component's state comes from a list, "the first item" is
+almost never the same question as "the item that belongs to me".
+
+The delete button is only rendered for doctors, mirroring the API's role rule — but the API refuses a
+patient regardless. **The UI is a convenience, not a security boundary.** Hiding a button is not
+authorization.
+
+---
+
+## Day 3 — Making the data real
+
+### Prompt 34
+> Fix the analytics mock data and the file upload.
+
+**What I was doing:** Removing the last of the fake data from the dashboards and the vault.
+
+**What I learned, on the analytics:** most of the charts were **already real** — weekly volume,
+status distribution and monthly counts all derive from genuine appointments. Two things were not:
+
+- **Revenue** was `revenue += 150`, a hardcoded guess at a consultation fee that exists nowhere in
+  the system. A fabricated *money* figure is the most misleading thing you can put on a dashboard —
+  it looks authoritative and it is fiction. Deleted, rather than inventing a fee field to justify it.
+- **Vitals** (heart rate, BP, weight) came from a hardcoded array. **No service had ever stored a
+  vital sign.** So the patient dashboard was charting invented health data *at a patient, as their
+  own*. That one got built for real — a `Vital` resource in notes-service, a new
+  `/api/vitals` BFF route, and a "Record" form on the dashboard.
+
+Both charts also fell back to a mock array whenever there was no real data — showing a doctor with
+zero bookings a chart of somebody's fictional ones. The replacement is an **honest empty state**:
+"No readings yet — record one". I would rather show nothing than something untrue, and I now think
+*"the chart looks empty"* is one of the most dangerous reasons to write code.
+
+Two React details worth keeping:
+
+- A **trend delta needs two data points.** With a single reading there is nothing to compare against,
+  so the component shows no delta rather than inventing one.
+- A weight-only reading must plot **nothing** for heart rate — not `0`. Charting a zero would draw a
+  patient whose heart had stopped.
+
+### Prompt 35
+> (same prompt — the file-upload half)
+
+**What I learned:** the vault **was not uploading files at all.** `FileVault` sent JSON containing a
+`fileUrl` it had *invented* (`/mock-vault/1699…-scan.pdf`); the `File` object never left the page.
+And `FileCard`'s "Download" generated a **text file summarising the record's metadata**, named
+`<name>_decrypted.txt` — it looked like a download and contained none of the document.
+
+It now sends the real `File` as `multipart/form-data`. Two things I would have got wrong:
+
+1. **Do not set `Content-Type` by hand on a `FormData` upload.** The browser has to generate it so it
+   can append the multipart boundary; setting it manually produces a body the server cannot parse.
+2. **The BFF proxy would have silently destroyed every file.** It did `await request.text()` on the
+   way up and `await response.text()` on the way down — **decoding binary as UTF-8**. Every byte
+   sequence that isn't valid UTF-8 is replaced with `U+FFFD`, so every PDF and JPEG would have
+   arrived quietly corrupted. It only ever "worked" because no real bytes were being sent. Reading and
+   writing `arrayBuffer()` in both directions fixes it.
+
+I also **removed the mock fallback** from the upload handler. It used to catch a failure and store a
+fake local record showing the upload had succeeded. Telling a patient their scan is safely in the
+vault when nothing was stored is far worse than an error message.
+
+---
+
+## Day 4 — The tests were lying
+
+### Prompt 36
+> Check again if you missed any task or any issue or error in the repo.
+
+**What I was doing:** A second pass over work already declared finished.
+
+**What I learned:** my Week 1 "unit tests" in `__tests__/auth.test.ts` **were not unit tests.** They
+called `register`, `login` and `getCurrentUser`, which make **real network requests**, and they
+passed only because nothing happened to be listening on the dev port — so the calls failed fast and
+the code fell through to its `localStorage` mock path.
+
+The day a connection to a dead port started *hanging* instead of being refused, all nine timed out.
+The tests had never actually asserted "the backend is unreachable"; they had **assumed** it, and got
+away with it by luck.
+
+Stubbing the HTTP layer (`vi.mock('../lib/api')` plus a stubbed `fetch`) makes the offline condition
+an **explicit precondition** instead of an accident of the machine. They now pass deterministically —
+and three times faster, because nothing waits on a socket.
+
+The general lesson, and the one I would keep from the whole week: **a passing test proves nothing
+until you know why it passes.** Mine were green for a reason that had nothing to do with my code.
+
+---
+
+## Summary — Week 3 (frontend)
+
+| # | Prompt Category | Key Concept Covered |
+|---|---|---|
+| 31 | Integration audit | A proxy existing ≠ a feature wired; mock fallbacks hide a dead backend |
+| 32 | **Full CRUD + auth** | BFF pattern, httpOnly cookies, why the client must never hold a signing secret |
+| 33 | State bugs | "First in the list" ≠ "mine"; hiding a button is not authorization |
+| 34 | **Honest data** | Empty state beats invented data; a delta needs two points; `null` ≠ `0` |
+| 35 | **Real file uploads** | `FormData` boundaries, binary-safe proxying, never fake a success |
+| 36 | Test quality | A passing test proves nothing until you know *why* it passes |
+
+**Total significant prompts logged: 36** (30 in Week 1, 6 in Week 3)
+
+**Week 3 frontend deliverable:** the app is wired to the real backend through the Next.js BFF — login
+with an httpOnly JWT cookie, full CRUD on clinical notes from the consultation room (with a
+role-gated delete), a medical vault that uploads and downloads **real bytes**, and dashboards that
+chart only data the system actually holds, with honest empty states where it holds none. No
+`NEXT_PUBLIC_*` secret, no invented revenue, no `/mock-vault/` paths. 20 frontend tests, ESLint and
+`tsc --noEmit` clean.
