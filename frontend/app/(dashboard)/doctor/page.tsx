@@ -37,40 +37,54 @@ export default function DoctorDashboard() {
 
   useEffect(() => {
     let active = true;
-    getCurrentUser().then(u => {
+    getCurrentUser().then(async u => {
       if (!active) return;
       if (!u) { router.push('/login'); return; }
       setUser(u);
-      setAppointments(getAppointmentsForDoctor(u.id));
-      setDoctorFiles(getFilesSharedWithDoctor());
-      setIsLoading(false);
+      try {
+        const [appts, files] = await Promise.all([
+          getAppointmentsForDoctor(u.id),
+          getFilesSharedWithDoctor(),
+        ]);
+        if (!active) return;
+        setAppointments(appts);
+        setDoctorFiles(files);
+      } catch (err) {
+        console.error('Failed to load doctor dashboard data:', err);
+      } finally {
+        if (active) setIsLoading(false);
+      }
     });
     return () => { active = false; };
   }, [router]);
 
-  const handleStatusUpdate = (id: string, status: 'confirmed' | 'cancelled' | 'completed') => {
-    updateAppointmentStatus(id, status);
-    const appt = appointments.find(a => a.id === id);
-    if (appt?.patientId) {
-      const labels: Record<typeof status, string> = {
-        confirmed: 'confirmed',
-        cancelled: 'cancelled',
-        completed: 'marked as completed',
-      };
-      saveNotification({
-        id: `notif-${Date.now()}`,
-        userId: appt.patientId,
-        title: `Appointment ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-        message: `Dr. ${user?.name ?? 'Your doctor'} has ${labels[status]} your appointment on ${appt.date} at ${appt.time}.`,
-        type: 'status_change',
-        read: false,
-        appointmentId: id,
-        createdAt: new Date().toISOString(),
-      });
+  const handleStatusUpdate = async (id: string, status: 'confirmed' | 'cancelled' | 'completed') => {
+    try {
+      const updatedAppt = await updateAppointmentStatus(id, status);
+      const appt = appointments.find(a => a.id === id) || updatedAppt;
+      if (appt?.patientId) {
+        const labels: Record<typeof status, string> = {
+          confirmed: 'confirmed',
+          cancelled: 'cancelled',
+          completed: 'marked as completed',
+        };
+        await saveNotification({
+          id: `notif-${Date.now()}`,
+          userId: appt.patientId,
+          title: `Appointment ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+          message: `Dr. ${user?.name ?? 'Your doctor'} has ${labels[status]} your appointment on ${appt.date} at ${appt.time}.`,
+          type: 'status_change',
+          read: false,
+          appointmentId: id,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      setAppointments(prev =>
+        prev.map(a => a.id === id ? { ...a, status, videoUrl: updatedAppt.videoUrl } : a)
+      );
+    } catch (err) {
+      console.error('Failed to update status on the backend:', err);
     }
-    setAppointments(prev =>
-      prev.map(a => a.id === id ? { ...a, status } : a)
-    );
   };
 
   const filteredAppointments = appointments.filter(a => {
@@ -270,7 +284,7 @@ export default function DoctorDashboard() {
           </motion.div>
         </div>
 
-        <DoctorAnalytics />
+        <DoctorAnalytics appointments={appointments} />
 
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <FileVault externalFiles={doctorFiles} onExternalFilesChange={setDoctorFiles} />

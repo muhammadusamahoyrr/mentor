@@ -2,50 +2,271 @@
   "info": {
     "_postman_id": "notes-svc-2026-week2-0001",
     "name": "Notes Service (Week 2)",
-    "description": "CRUD REST API for the Notes resource (Prisma + SQLite). Doctor -> Notes one-to-many relationship. Start the server with `npm start` before sending requests.",
+    "description": "CRUD REST API for the Notes resource (Prisma + SQLite). Doctor -> Notes one-to-many relationship.\n\nEvery /api route requires the auth-service JWT, so run **Setup > Login** first: it captures the token into the {{token}} collection variable, and the rest of the collection sends it automatically as a bearer token.\n\nRequired services:\n- notes-service on :3006  (`npm start`)  — needed by everything\n- auth-service  on :3001                — needed to log in\n- appointment-service on :3002           — needed only by the 'Consultation notes' folder\n\nRun the folders top to bottom: each one captures the ids the next one needs ({{doctorId}}, {{noteId}}, {{appointmentId}}).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
   "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:3005",
-      "type": "string"
-    }
+    { "key": "baseUrl", "value": "http://localhost:3006", "type": "string" },
+    { "key": "authUrl", "value": "http://localhost:3001", "type": "string" },
+    { "key": "apptUrl", "value": "http://localhost:3002", "type": "string" },
+    { "key": "doctorEmail", "value": "notes.doctor@demo.com", "type": "string" },
+    { "key": "patientEmail", "value": "notes.patient@demo.com", "type": "string" },
+    { "key": "password", "value": "Passw0rd!", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "patientToken", "value": "", "type": "string" },
+    { "key": "doctorId", "value": "", "type": "string" },
+    { "key": "noteId", "value": "", "type": "string" },
+    { "key": "appointmentId", "value": "", "type": "string" }
   ],
   "item": [
     {
       "name": "0. Health check",
       "request": {
+        "auth": { "type": "noauth" },
         "method": "GET",
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/health",
           "host": ["{{baseUrl}}"],
           "path": ["health"]
+        },
+        "description": "The only route that does not need a token."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('service is notes', () => pm.expect(pm.response.json().service).to.eql('notes'));"
+            ]
+          }
         }
-      }
+      ]
+    },
+    {
+      "name": "0b. Any /api route without a token -> 401",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/notes?doctorId=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "notes"],
+          "query": [{ "key": "doctorId", "value": "1" }]
+        },
+        "description": "Runs before Setup, while no token exists.\n\nIt has to run here: notes-service accepts the JWT as a bearer token OR as a cookie, and cookies are scoped by domain, not by port. Once you log in against auth-service on :3001, Postman's cookie jar will happily send that same token to :3006 — so after login, simply omitting the Authorization header does NOT make you anonymous. The pre-request script empties the jar so this check is honest even on a re-run."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Drop any token cookie left over from a previous run, so that",
+              "// 'no token' really means no token.",
+              "const jar = pm.cookies.jar();",
+              "jar.clear(pm.collectionVariables.get('baseUrl'), () => {});",
+              "pm.collectionVariables.set('token', '');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+              "pm.test('no data leaked', () => pm.expect(pm.response.text()).to.not.include('content'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Setup (run first)",
+      "description": "Creates the demo accounts and captures the JWTs the rest of the collection needs.",
+      "item": [
+        {
+          "name": "A. Register demo doctor (run once)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dr. House\",\n  \"email\": \"{{doctorEmail}}\",\n  \"password\": \"{{password}}\",\n  \"role\": \"doctor\",\n  \"specialization\": \"Diagnostics\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/auth/register",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fine to re-run: an existing account just comes back as a 4xx.",
+                  "pm.test('created, or already exists', () =>",
+                  "  pm.expect([201, 200, 400, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "B. Register demo patient (run once)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Patient\",\n  \"email\": \"{{patientEmail}}\",\n  \"password\": \"{{password}}\",\n  \"role\": \"patient\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/auth/register",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created, or already exists', () =>",
+                  "  pm.expect([201, 200, 400, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C. Login as doctor -> captures {{token}}",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{doctorEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/auth/login",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "auth-service returns the JWT as an httpOnly cookie, not in the body — so this pulls it out of Set-Cookie and stores it in {{token}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "// The token arrives as a Set-Cookie header; fall back to the cookie jar.",
+                  "const setCookie = pm.response.headers.get('Set-Cookie') || '';",
+                  "const match = setCookie.match(/token=([^;]+)/);",
+                  "const token = match ? match[1] : pm.cookies.get('token');",
+                  "",
+                  "if (token) { pm.collectionVariables.set('token', token); }",
+                  "",
+                  "pm.test('captured a JWT into {{token}}', () =>",
+                  "  pm.expect(pm.collectionVariables.get('token')).to.be.a('string').and.to.have.length.above(20));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D. Login as patient -> captures {{patientToken}}",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{patientEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{authUrl}}/api/auth/login",
+              "host": ["{{authUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Only needed by the 'Consultation notes' folder — appointments can only be booked by a patient."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const setCookie = pm.response.headers.get('Set-Cookie') || '';",
+                  "const match = setCookie.match(/token=([^;]+)/);",
+                  "const token = match ? match[1] : pm.cookies.get('token');",
+                  "",
+                  "if (token) { pm.collectionVariables.set('patientToken', token); }",
+                  "",
+                  "pm.test('captured a JWT into {{patientToken}}', () =>",
+                  "  pm.expect(pm.collectionVariables.get('patientToken')).to.be.a('string').and.to.have.length.above(20));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "name": "Doctors",
       "item": [
         {
-          "name": "1. Create doctor",
+          "name": "1. Create doctor -> captures {{doctorId}}",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Dr. House\",\n  \"email\": \"house@demo.com\",\n  \"specialization\": \"Diagnostics\"\n}",
+              "raw": "{\n  \"name\": \"Dr. House\",\n  \"email\": \"house-{{$timestamp}}@demo.com\",\n  \"specialization\": \"Diagnostics\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{baseUrl}}/api/doctors",
               "host": ["{{baseUrl}}"],
               "path": ["api", "doctors"]
+            },
+            "description": "The parent of the one-to-many relationship. Email is unique, so it's timestamped to keep this re-runnable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('doctorId', pm.response.json().id);"
+                ]
+              }
             }
-          }
+          ]
         },
         {
           "name": "2. List doctors (with their notes)",
@@ -56,8 +277,29 @@
               "raw": "{{baseUrl}}/api/doctors",
               "host": ["{{baseUrl}}"],
               "path": ["api", "doctors"]
+            },
+            "description": "The relationship read the other way: each doctor comes back with their notes nested. Consultation notes are deliberately excluded — those are only readable via ?appointmentId=, where the caller is checked against the appointment."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('doctors carry a nested notes array', () => {",
+                  "  const doctors = pm.response.json();",
+                  "  pm.expect(doctors).to.be.an('array');",
+                  "  if (doctors.length) pm.expect(doctors[0].notes).to.be.an('array');",
+                  "});",
+                  "pm.test('no consultation notes are exposed here', () => {",
+                  "  const leaked = pm.response.json().flatMap(d => d.notes || []).filter(n => n.appointmentId);",
+                  "  pm.expect(leaked.length).to.eql(0);",
+                  "});"
+                ]
+              }
             }
-          }
+          ]
         }
       ]
     },
@@ -65,118 +307,334 @@
       "name": "Notes (CRUD)",
       "item": [
         {
-          "name": "3. Create note",
+          "name": "3. Create note -> captures {{noteId}}",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"doctorId\": 1,\n  \"title\": \"BP reading\",\n  \"content\": \"120/80, patient stable\"\n}",
+              "raw": "{\n  \"doctorId\": {{doctorId}},\n  \"title\": \"BP reading\",\n  \"content\": \"120/80, patient stable\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{baseUrl}}/api/notes",
               "host": ["{{baseUrl}}"],
               "path": ["api", "notes"]
+            },
+            "description": "A standalone note: filed straight against a doctor. The author is taken from the JWT, not the body."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const note = pm.response.json();",
+                  "pm.collectionVariables.set('noteId', note.id);",
+                  "pm.test('foreign key points at the doctor', () =>",
+                  "  pm.expect(String(note.doctorId)).to.eql(String(pm.collectionVariables.get('doctorId'))));",
+                  "pm.test('author recorded from the JWT', () => pm.expect(note.authorId).to.be.a('string'));"
+                ]
+              }
             }
-          }
+          ]
         },
         {
-          "name": "4. List all notes",
+          "name": "4. List notes for a doctor",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/notes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "notes"]
-            }
-          }
-        },
-        {
-          "name": "5. List notes filtered by doctor",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/notes?doctorId=1",
+              "raw": "{{baseUrl}}/api/notes?doctorId={{doctorId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "notes"],
-              "query": [{ "key": "doctorId", "value": "1" }]
+              "query": [{ "key": "doctorId", "value": "{{doctorId}}" }]
+            },
+            "description": "Listing every note in the service is not allowed — you must scope by doctorId or appointmentId. See the negative tests folder."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
             }
-          }
+          ]
         },
         {
-          "name": "6. Get one note (doctor joined in)",
+          "name": "5. Get one note (doctor joined in)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/notes/1",
+              "raw": "{{baseUrl}}/api/notes/{{noteId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "notes", "1"]
+              "path": ["api", "notes", "{{noteId}}"]
+            },
+            "description": "Prisma `include` resolves the relation, so the parent Doctor comes back nested."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('joined doctor is present', () => pm.expect(pm.response.json().doctor).to.be.an('object'));"
+                ]
+              }
             }
-          }
+          ]
         },
         {
-          "name": "7. Update note",
+          "name": "6. Update note",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Morning BP reading\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/notes/1",
+              "raw": "{{baseUrl}}/api/notes/{{noteId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "notes", "1"]
+              "path": ["api", "notes", "{{noteId}}"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('title was updated', () => pm.expect(pm.response.json().title).to.eql('Morning BP reading'));"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "8. Delete note",
+          "name": "7. Delete note",
           "request": {
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/notes/1",
+              "raw": "{{baseUrl}}/api/notes/{{noteId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "notes", "1"]
+              "path": ["api", "notes", "{{noteId}}"]
             }
-          }
-        },
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Consultation notes (needs appointment-service)",
+      "description": "The path the video-call page uses. notes-service holds no appointment data, so before it will serve a consultation note it asks appointment-service whether the caller is actually on that appointment.",
+      "item": [
         {
-          "name": "9. (Test) Invalid note -> 400",
+          "name": "8. Book an appointment (as patient) -> captures {{appointmentId}}",
           "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{patientToken}}", "type": "string" }]
+            },
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"doctorId\": 1,\n  \"title\": \"\",\n  \"content\": \"x\"\n}",
+              "raw": "{\n  \"doctorId\": \"{{doctorAuthId}}\",\n  \"date\": \"2026-12-01\",\n  \"time\": \"10:00\",\n  \"reason\": \"Postman demo consultation\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{apptUrl}}/api/appointments",
+              "host": ["{{apptUrl}}"],
+              "path": ["api", "appointments"]
+            },
+            "description": "Only a patient may book, hence {{patientToken}}. The pre-request script looks up the demo doctor's auth-service id."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Find the demo doctor's auth-service id (a Mongo ObjectId, not the",
+                  "// notes-service integer id) so we can book against them.",
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('authUrl') + '/api/auth/doctors',",
+                  "  method: 'GET',",
+                  "  header: { Authorization: 'Bearer ' + pm.collectionVariables.get('patientToken') }",
+                  "}, (err, res) => {",
+                  "  if (err || res.code !== 200) { return; }",
+                  "  const wanted = pm.collectionVariables.get('doctorEmail');",
+                  "  const list = res.json();",
+                  "  const doc = list.find(d => d.email === wanted) || list[0];",
+                  "  if (doc) { pm.collectionVariables.set('doctorAuthId', doc.id || doc._id); }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const appt = pm.response.json();",
+                  "pm.collectionVariables.set('appointmentId', appt.id || appt._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Doctor writes a consultation note",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": \"{{appointmentId}}\",\n  \"title\": \"Consultation\",\n  \"content\": \"Reviewed symptoms. Continue current medication.\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
               "raw": "{{baseUrl}}/api/notes",
               "host": ["{{baseUrl}}"],
               "path": ["api", "notes"]
+            },
+            "description": "No doctorId in the body: notes-service derives the doctor from the appointment and upserts a local Doctor row keyed on the auth-service user id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const note = pm.response.json();",
+                  "pm.collectionVariables.set('consultationNoteId', note.id);",
+                  "pm.test('note is tied to the appointment', () =>",
+                  "  pm.expect(note.appointmentId).to.eql(pm.collectionVariables.get('appointmentId')));"
+                ]
+              }
             }
-          }
+          ]
         },
         {
-          "name": "10. (Test) Note for missing doctor -> 404",
+          "name": "10. Patient reads the notes for their appointment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{patientToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/notes?appointmentId={{appointmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notes"],
+              "query": [{ "key": "appointmentId", "value": "{{appointmentId}}" }]
+            },
+            "description": "The patient is on this appointment, so appointment-service confirms them and the note is served."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK — participant may read', () => pm.response.to.have.status(200));",
+                  "pm.test('the doctor\\'s note is visible to them', () =>",
+                  "  pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Negative tests",
+      "description": "The failure modes worth demonstrating: authentication, authorisation, validation and the foreign-key constraint.",
+      "item": [
+        {
+          "name": "11. Unscoped list -> 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/notes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notes"]
+            },
+            "description": "Returning every note in the service is never safe, so a filter is required."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('explains the filter is required', () =>",
+                  "  pm.expect(pm.response.json().error).to.include('required'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12. Invalid note (empty title) -> 400",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctorId\": {{doctorId}},\n  \"title\": \"\",\n  \"content\": \"x\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/notes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notes"]
+            },
+            "description": "Zod rejects this before the controller ever runs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('validation details are returned', () =>",
+                  "  pm.expect(pm.response.json().details).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13. Note for missing doctor -> 404",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"doctorId\": 999999,\n  \"title\": \"x\",\n  \"content\": \"y\"\n}",
@@ -186,8 +644,80 @@
               "raw": "{{baseUrl}}/api/notes",
               "host": ["{{baseUrl}}"],
               "path": ["api", "notes"]
+            },
+            "description": "The relationship is enforced: a note cannot exist without its parent doctor."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('404 Not Found', () => pm.response.to.have.status(404));"]
+              }
             }
-          }
+          ]
+        },
+        {
+          "name": "14. Non-participant reads a consultation note -> 403",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{outsiderToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/notes?appointmentId={{appointmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notes"],
+              "query": [{ "key": "appointmentId", "value": "{{appointmentId}}" }]
+            },
+            "description": "A logged-in user who is neither the patient nor the doctor on the appointment is refused. The pre-request script registers and logs in a throwaway third user."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Spin up a throwaway third party who is on nobody's appointment.",
+                  "const authUrl = pm.collectionVariables.get('authUrl');",
+                  "const email = 'outsider-' + Date.now() + '@demo.com';",
+                  "const password = pm.collectionVariables.get('password');",
+                  "",
+                  "pm.sendRequest({",
+                  "  url: authUrl + '/api/auth/register',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({ name: 'Outsider', email, password, role: 'patient' }) }",
+                  "}, () => {",
+                  "  pm.sendRequest({",
+                  "    url: authUrl + '/api/auth/login',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ email, password }) }",
+                  "  }, (err, res) => {",
+                  "    if (err || !res) { return; }",
+                  "    const setCookie = (res.headers.get('Set-Cookie') || '');",
+                  "    const match = setCookie.match(/token=([^;]+)/);",
+                  "    if (match) { pm.collectionVariables.set('outsiderToken', match[1]); }",
+                  "  });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('no clinical content leaked', () =>",
+                  "  pm.expect(pm.response.text()).to.not.include('Continue current medication'));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

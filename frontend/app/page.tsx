@@ -152,7 +152,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-14">
             <p className="text-xs font-black text-blue-600 uppercase tracking-[0.3em] mb-3">Why CareLoop</p>
-            <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">Everything You Need,<br />Nothing You Don't</h2>
+            <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">Everything You Need,<br />Nothing You Don&apos;t</h2>
             <p className="text-slate-500 mt-4 max-w-xl mx-auto font-medium">Built for patients and doctors alike, CareLoop removes friction at every step.</p>
           </div>
 
@@ -286,7 +286,7 @@ export default function Home() {
                     <Star key={j} className="h-4 w-4 fill-amber-400 text-amber-400" />
                   ))}
                 </div>
-                <p className="text-slate-700 font-medium leading-relaxed mb-6 italic">"{t.quote}"</p>
+                <p className="text-slate-700 font-medium leading-relaxed mb-6 italic">&ldquo;{t.quote}&rdquo;</p>
                 <div className="flex items-center gap-3">
                   <div className={`h-10 w-10 rounded-full ${t.color} flex items-center justify-center font-black text-sm`}>{t.initials}</div>
                   <div>

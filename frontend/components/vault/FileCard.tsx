@@ -19,6 +19,7 @@ const CATEGORY_CONFIG = {
 
 export default function FileCard({ file, doctors = [], onToggleShare, onDelete }: FileCardProps) {
   const [showDoctorSelect, setShowDoctorSelect] = useState(false);
+  const [shareError, setShareError] = useState('');
   const config = CATEGORY_CONFIG[file.category as keyof typeof CATEGORY_CONFIG] ?? CATEGORY_CONFIG.Prescription;
   const Icon = config.icon;
 
@@ -42,9 +43,17 @@ Sharing:       ${file.sharedWithDoctor ? 'Shared with doctor' : 'Private'}
 
   const handleToggle = () => {
     if (!onToggleShare) return;
+    // Unsharing needs no doctor.
     if (file.sharedWithDoctor) { onToggleShare(file.id); return; }
-    if (doctors.length > 0) setShowDoctorSelect(p => !p);
-    else onToggleShare(file.id);
+    // Sharing does. With no doctor list loaded there is nobody to share with —
+    // previously this asked the backend to share with "anyone", and it picked
+    // the first doctor in the database.
+    if (doctors.length === 0) {
+      setShareError('No doctors available to share with yet.');
+      return;
+    }
+    setShareError('');
+    setShowDoctorSelect(p => !p);
   };
 
   return (
@@ -145,6 +154,10 @@ Sharing:       ${file.sharedWithDoctor ? 'Shared with doctor' : 'Private'}
             )}
           </div>
         </div>
+
+        {shareError && (
+          <p className="text-[11px] font-semibold text-amber-600 mt-2">{shareError}</p>
+        )}
 
         <AnimatePresence>
           {showDoctorSelect && (

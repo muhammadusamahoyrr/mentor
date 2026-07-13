@@ -18,6 +18,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem('careloop_theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const dark = stored !== null ? stored === 'dark' : prefersDark;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsDark(dark);
     document.documentElement.classList.toggle('dark', dark);
   }, []);

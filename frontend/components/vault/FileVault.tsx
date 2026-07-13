@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, FolderOpen, CheckCircle } from 'lucide-react';
 import { User, MedicalFile } from '@/types';
-import { getCurrentUser, getFilesForUser, saveFilesForUser } from '@/lib/auth';
+import { getCurrentUser, getFilesForUser, saveFilesForUser, uploadFileToService, toggleFileShare, deleteFileFromService } from '@/lib/auth';
 import FileCard from './FileCard';
 import FileFilters, { FileCategoryFilter } from './FileFilters';
 import FileDropzone from './FileDropzone';
@@ -39,13 +39,18 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
 
   useEffect(() => {
     let active = true;
-    getCurrentUser().then(u => {
+    getCurrentUser().then(async u => {
       if (!active) return;
       setUser(u);
       if (u?.role === 'patient') {
-        setInternalFiles(getFilesForUser(u.id));
+        try {
+          const list = await getFilesForUser(u.id);
+          if (active) setInternalFiles(list);
+        } catch (err) {
+          console.error('Failed to load patient vault files:', err);
+        }
       }
-      setIsLoading(false);
+      if (active) setIsLoading(false);
     });
     return () => {
       active = false;
@@ -63,7 +68,7 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
     }
   };
 
-  const handleFileAccepted = (file: File) => {
+  const handleFileAccepted = async (file: File) => {
     let category: 'Prescription' | 'Lab Result' | 'Scan' = 'Prescription';
     const nameLower = file.name.toLowerCase();
 
@@ -78,33 +83,67 @@ export default function FileVault({ doctors = [], externalFiles, onExternalFiles
       ? `${(file.size / 1024).toFixed(1)} KB`
       : `${sizeInMB.toFixed(1)} MB`;
 
-    const newFile: MedicalFile = {
-      id: `file-${Date.now()}`,
-      name: file.name,
-      size,
-      category,
-      uploadedAt: new Date().toISOString(),
-      sharedWithDoctor: false,
-      patientName: user?.name,
-      patientEmail: user?.email,
-      patientId: user?.id,
-    };
-
-    persistFiles(prev => [newFile, ...prev]);
-    showToast(`${file.name} uploaded successfully.`);
+    try {
+      const uploadedFile = await uploadFileToService({
+        fileName: file.name,
+        fileSize: file.size,
+        fileSizeFormatted: size,
+        category,
+        mimeType: file.type || 'application/octet-stream',
+        fileUrl: `/mock-vault/${Date.now()}-${file.name}`
+      });
+      setInternalFiles(prev => [uploadedFile, ...prev]);
+      showToast(`${file.name} uploaded successfully.`);
+    } catch (err) {
+      console.warn('Backend file-service offline, falling back to mock...');
+      const newFile: MedicalFile = {
+        id: `file-${Date.now()}`,
+        name: file.name,
+        size,
+        category,
+        uploadedAt: new Date().toISOString(),
+        sharedWithDoctor: false,
+        patientName: user?.name,
+        patientEmail: user?.email,
+        patientId: user?.id || 'p-demo',
+      };
+      setInternalFiles(prev => [newFile, ...prev]);
+      saveFilesForUser(user?.id || 'p-demo', [newFile, ...internalFiles]);
+      showToast(`${file.name} uploaded (local mock mode).`);
+    }
   };
 
-  const handleToggleShare = (id: string, doctorId?: string, doctorName?: string) => {
-    persistFiles(prev => prev.map(f =>
-      f.id === id
-        ? { ...f, sharedWithDoctor: !f.sharedWithDoctor, doctorId, doctorName }
-        : f
-    ));
+  const handleToggleShare = async (id: string, doctorId?: string, doctorName?: string) => {
+    try {
+      const updated = await toggleFileShare(id, doctorId, doctorName);
+      setInternalFiles(prev => prev.map(f => f.id === id ? updated : f));
+      if (onExternalFilesChange) {
+        onExternalFilesChange(prev => prev.map(f => f.id === id ? updated : f));
+      }
+      showToast(updated.sharedWithDoctor ? 'Shared file with doctor.' : 'Unshared file.');
+    } catch {
+      console.warn('Backend file share offline, falling back to mock...');
+      persistFiles(prev => prev.map(f =>
+        f.id === id
+          ? { ...f, sharedWithDoctor: !f.sharedWithDoctor, doctorId, doctorName }
+          : f
+      ));
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this document from your vault?')) return;
-    persistFiles(prev => prev.filter(f => f.id !== id));
+    try {
+      await deleteFileFromService(id);
+      setInternalFiles(prev => prev.filter(f => f.id !== id));
+      if (onExternalFilesChange) {
+        onExternalFilesChange(prev => prev.filter(f => f.id !== id));
+      }
+      showToast('Document deleted successfully.');
+    } catch {
+      console.warn('Backend file delete offline, deleting locally...');
+      persistFiles(prev => prev.filter(f => f.id !== id));
+    }
   };
 
   const filteredFiles = files.filter(f => activeFilter === 'All' || f.category === activeFilter);

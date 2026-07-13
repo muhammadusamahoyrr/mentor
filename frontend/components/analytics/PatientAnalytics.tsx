@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   AreaChart, Area, BarChart, Bar,
@@ -7,7 +7,10 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { Heart, Activity, Scale, TrendingDown } from 'lucide-react';
-import { MOCK_VITALS_TREND, MOCK_APPOINTMENT_HISTORY } from '@/lib/mockData';
+import { MOCK_VITALS_TREND } from '@/lib/mockData';
+import { Appointment } from '@/types';
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const VITAL_UNITS: Record<string, string> = {
   heartRate: ' bpm',
@@ -16,12 +19,12 @@ const VITAL_UNITS: Record<string, string> = {
   weight:    ' kg',
 };
 
-const ChartTooltip = ({ active, payload, label }: any) => {
+const ChartTooltip = ({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; color: string; name: string; value: number }[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-wire rounded-xl px-4 py-3 shadow-xl text-xs tt">
       <p className="font-black text-ink mb-2 tt">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map(p => (
         <div key={p.dataKey} className="flex items-center gap-2 mb-1">
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
           <span className="text-dim tt">{p.name}:</span>
@@ -36,17 +39,45 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 type VitalKey = 'heartRate' | 'systolic' | 'weight';
 
-const VITAL_CONFIG: Record<VitalKey, { label: string; unit: string; color: string; icon: any; refLow: number; refHigh: number; gradient: string }> = {
-  heartRate: { label: 'Heart Rate',     unit: 'bpm',  color: '#ef4444', icon: Heart,       refLow: 60,  refHigh: 100, gradient: 'gradHR'  },
-  systolic:  { label: 'Blood Pressure', unit: 'mmHg', color: '#3b82f6', icon: Activity,    refLow: 90,  refHigh: 120, gradient: 'gradBP'  },
-  weight:    { label: 'Body Weight',    unit: 'kg',   color: '#10b981', icon: Scale,        refLow: 60,  refHigh: 90,  gradient: 'gradWgt' },
+const VITAL_CONFIG: Record<VitalKey, { label: string; unit: string; color: string; icon: React.ElementType; refLow: number; refHigh: number; gradient: string }> = {
+  heartRate: { label: 'Heart Rate',     unit: 'bpm',  color: '#ef4444', icon: Heart,    refLow: 60,  refHigh: 100, gradient: 'gradHR'  },
+  systolic:  { label: 'Blood Pressure', unit: 'mmHg', color: '#3b82f6', icon: Activity, refLow: 90,  refHigh: 120, gradient: 'gradBP'  },
+  weight:    { label: 'Body Weight',    unit: 'kg',   color: '#10b981', icon: Scale,    refLow: 60,  refHigh: 90,  gradient: 'gradWgt' },
 };
 
-export default function PatientAnalytics() {
+interface PatientAnalyticsProps {
+  appointments?: Appointment[];
+}
+
+export default function PatientAnalytics({ appointments = [] }: PatientAnalyticsProps) {
   const [activeVital, setActiveVital] = useState<VitalKey>('heartRate');
   const config = VITAL_CONFIG[activeVital];
   const Icon = config.icon;
 
+  // ── Appointment history from real data ──────────────────────
+  const appointmentHistory = useMemo(() => {
+    const today = new Date();
+    const months: { month: string; booked: number; cancelled: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      months.push({ month: MONTHS_SHORT[d.getMonth()], booked: 0, cancelled: 0 });
+    }
+    appointments.forEach(a => {
+      const apptDate = new Date(a.date);
+      const diffMonths = (today.getFullYear() - apptDate.getFullYear()) * 12 + (today.getMonth() - apptDate.getMonth());
+      if (diffMonths >= 0 && diffMonths < 6) {
+        const idx = 5 - diffMonths;
+        months[idx].booked++;
+        if (a.status === 'cancelled') months[idx].cancelled++;
+      }
+    });
+    return months;
+  }, [appointments]);
+
+  const totalBooked    = useMemo(() => appointments.length, [appointments]);
+  const totalCancelled = useMemo(() => appointments.filter(a => a.status === 'cancelled').length, [appointments]);
+
+  // Vitals always use static demo data (no vitals service exists)
   if (MOCK_VITALS_TREND.length < 2) return null;
   const latest = MOCK_VITALS_TREND[MOCK_VITALS_TREND.length - 1];
   const prev    = MOCK_VITALS_TREND[MOCK_VITALS_TREND.length - 2];
@@ -62,7 +93,7 @@ export default function PatientAnalytics() {
     >
       <div>
         <h2 className="text-2xl font-black text-ink tracking-tight tt">My Health Analytics</h2>
-        <p className="text-dim text-sm font-medium mt-0.5 tt">Personal vitals & appointment history at a glance</p>
+        <p className="text-dim text-sm font-medium mt-0.5 tt">Personal vitals &amp; appointment history at a glance</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -176,7 +207,7 @@ export default function PatientAnalytics() {
           })}
         </div>
 
-        {/* Appointment history bar chart */}
+        {/* Appointment history bar chart — LIVE */}
         <div className="lg:col-span-3 bg-card rounded-2xl border border-wire p-6 tt">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -185,11 +216,11 @@ export default function PatientAnalytics() {
               </div>
               <div>
                 <h3 className="font-black text-ink text-base tt">Appointment History</h3>
-                <p className="text-ghost text-xs font-medium tt">Bookings vs cancellations over 6 months</p>
+                <p className="text-ghost text-xs font-medium tt">Bookings vs cancellations over 6 months (live)</p>
               </div>
             </div>
             <div className="flex gap-6">
-              {[{ label: 'Total Booked', value: '11', color: '#6366f1' }, { label: 'Cancelled', value: '2', color: '#ef4444' }].map(kpi => (
+              {[{ label: 'Total Booked', value: String(totalBooked), color: '#6366f1' }, { label: 'Cancelled', value: String(totalCancelled), color: '#ef4444' }].map(kpi => (
                 <div key={kpi.label} className="text-right">
                   <p className="text-[10px] font-black text-ghost uppercase tracking-widest tt">{kpi.label}</p>
                   <p className="text-xl font-black mt-0.5" style={{ color: kpi.color }}>{kpi.value}</p>
@@ -198,11 +229,11 @@ export default function PatientAnalytics() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={MOCK_APPOINTMENT_HISTORY} barSize={14} barGap={4}>
+            <BarChart data={appointmentHistory} barSize={14} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-wire)" strokeOpacity={0.5} vertical={false} />
               <XAxis dataKey="month" tick={{ fill: 'var(--color-ghost)', fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: 'var(--color-ghost)', fontSize: 11 }} axisLine={false} tickLine={false} width={24} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--color-wire)', opacity: 0.25, radius: 6 }} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--color-wire)', opacity: 0.25, radius: 6 } as object} />
               <Bar dataKey="booked"    name="Booked"     fill="#6366f1" radius={[4, 4, 0, 0]} />
               <Bar dataKey="cancelled" name="Cancelled"  fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.8} />
             </BarChart>

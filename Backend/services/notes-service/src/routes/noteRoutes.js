@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const noteController = require('../controllers/noteController');
+const { authenticate } = require('../middleware/authMiddleware');
 const { validate } = require('../middleware/validate');
 const { createNoteSchema, updateNoteSchema } = require('../validation/noteSchema');
+
+// Notes are clinical records — every route needs an identified caller.
+router.use(authenticate);
 
 // Full CRUD for the Note resource.
 router.post('/', validate(createNoteSchema), noteController.createNote);

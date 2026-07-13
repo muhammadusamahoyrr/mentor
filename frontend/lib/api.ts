@@ -1,9 +1,12 @@
 import axios from 'axios';
 
-// Axios instance demonstrating the HTTP API calling pattern (Week 1 topic: fetch / axios, error handling)
+// Axios instance — all requests go through the Next.js BFF proxy (same origin).
+// This ensures cookies are forwarded correctly and backend service URLs are
+// never exposed to the browser in production.
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  baseURL: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
 export default api;

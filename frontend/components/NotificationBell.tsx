@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Bell, X, Check } from 'lucide-react';
+import { io } from 'socket.io-client';
 import { AppNotification } from '@/types';
 import {
   getNotificationsForUser,
@@ -18,18 +19,54 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
 
   useEffect(() => {
     if (!userId) return;
-    setNotifications(getNotificationsForUser(userId));
+    let active = true;
+
+    getNotificationsForUser(userId).then(list => {
+      if (active) setNotifications(list);
+    }).catch(err => {
+      console.error('Failed to load user notifications:', err);
+    });
+
+    const socketHost = process.env.NEXT_PUBLIC_NOTIFICATION_SOCKET_URL || 'http://localhost:3003';
+    const socket = io(socketHost, {
+      transports: ['websocket'],
+      withCredentials: true,
+    });
+
+    socket.on('connect', () => {
+      console.log('✓ Secure Notification socket connected');
+      // Tell the server which user room to subscribe to
+      socket.emit('join', userId);
+    });
+
+    socket.on('notification', (newNotif: AppNotification) => {
+      console.log('🔔 Real-time socket notification received:', newNotif);
+      setNotifications(prev => [newNotif, ...prev]);
+    });
+
+    return () => {
+      active = false;
+      socket.disconnect();
+    };
   }, [userId]);
 
   const totalUnread = notifications.filter(n => !n.read).length;
 
-  const handleMarkAsRead = (id: string) => {
-    markNotificationRead(id);
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+    } catch {
+      console.warn('Notification service offline, marking locally...');
+    }
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
-  const handleMarkAllAsRead = () => {
-    if (userId) markAllNotificationsRead(userId);
+  const handleMarkAllAsRead = async () => {
+    try {
+      if (userId) await markAllNotificationsRead(userId);
+    } catch {
+      console.warn('Notification service offline, marking all locally...');
+    }
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 

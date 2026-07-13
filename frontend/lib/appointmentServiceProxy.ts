@@ -2,9 +2,7 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 const APPOINTMENT_SERVICE =
-  process.env.APPOINTMENT_SERVICE_URL ||
-  process.env.NEXT_PUBLIC_APPOINTMENT_SERVICE_URL ||
-  'http://localhost:3002';
+  process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3002';
 
 export async function proxyToAppointmentService(
   request: NextRequest,

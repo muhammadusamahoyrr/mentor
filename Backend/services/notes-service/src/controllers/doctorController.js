@@ -18,7 +18,10 @@ exports.createDoctor = asyncHandler(async (req, res) => {
 // LIST doctors with their notes — GET /api/doctors  (relationship, the other direction)
 exports.getDoctors = asyncHandler(async (req, res) => {
   const doctors = await prisma.doctor.findMany({
-    include: { notes: true }, // each doctor comes back with their notes nested
+    // Each doctor comes back with their notes nested. Consultation notes are
+    // excluded: they can only be read via /api/notes?appointmentId=, where the
+    // caller is checked against the appointment's participants.
+    include: { notes: { where: { appointmentId: null } } },
     orderBy: { id: 'asc' },
   });
   res.json(doctors);

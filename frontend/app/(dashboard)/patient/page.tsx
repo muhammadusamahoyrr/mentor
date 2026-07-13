@@ -25,13 +25,23 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     let active = true;
-    getCurrentUser().then(u => {
+    getCurrentUser().then(async u => {
       if (!active) return;
       if (!u) { router.push('/login'); return; }
       setUser(u);
-      setDoctors(getAvailableDoctors());
-      setAppointments(getAppointmentsForPatient(u.id));
-      setIsLoading(false);
+      try {
+        const [docs, appts] = await Promise.all([
+          getAvailableDoctors(),
+          getAppointmentsForPatient(u.id),
+        ]);
+        if (!active) return;
+        setDoctors(docs);
+        setAppointments(appts);
+      } catch (err) {
+        console.error('Failed to load user records from microservices:', err);
+      } finally {
+        if (active) setIsLoading(false);
+      }
     });
     return () => { active = false; };
   }, [router]);
@@ -57,46 +67,50 @@ export default function PatientDashboard() {
         updatedAt: new Date().toISOString(),
       };
 
-      saveAppointment(newAppointment);
+      const savedAppt = await saveAppointment(newAppointment);
       // Notify the doctor
       if (doctor) {
-        saveNotification({
+        await saveNotification({
           id: `notif-${Date.now()}`,
           userId: doctor.id,
           title: 'New Appointment Request',
           message: `${user?.name ?? 'A patient'} requested an appointment on ${formData.date} at ${formData.time}.`,
           type: 'appointment',
           read: false,
-          appointmentId: newAppointment.id,
+          appointmentId: savedAppt.id,
           createdAt: new Date().toISOString(),
         });
       }
-      setAppointments(prev => [newAppointment, ...prev]);
+      setAppointments(prev => [savedAppt, ...prev]);
       setFormData({ doctorId: '', date: '', time: '', reason: '' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancel = (id: string) => {
+  const handleCancel = async (id: string) => {
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
-    const appt = appointments.find(a => a.id === id);
-    updateAppointmentStatus(id, 'cancelled');
-    if (appt?.doctorId) {
-      saveNotification({
-        id: `notif-${Date.now()}`,
-        userId: appt.doctorId,
-        title: 'Appointment Cancelled',
-        message: `${user?.name ?? 'A patient'} cancelled their appointment on ${appt.date} at ${appt.time}.`,
-        type: 'status_change',
-        read: false,
-        appointmentId: id,
-        createdAt: new Date().toISOString(),
-      });
+    try {
+      await updateAppointmentStatus(id, 'cancelled');
+      const appt = appointments.find(a => a.id === id);
+      if (appt?.doctorId) {
+        await saveNotification({
+          id: `notif-${Date.now()}`,
+          userId: appt.doctorId,
+          title: 'Appointment Cancelled',
+          message: `${user?.name ?? 'A patient'} cancelled their appointment on ${appt.date} at ${appt.time}.`,
+          type: 'status_change',
+          read: false,
+          appointmentId: id,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      setAppointments(prev =>
+        prev.map(a => a.id === id ? { ...a, status: 'cancelled' as const } : a)
+      );
+    } catch (err) {
+      console.error('Failed to cancel appointment:', err);
     }
-    setAppointments(prev =>
-      prev.map(a => a.id === id ? { ...a, status: 'cancelled' as const } : a)
-    );
   };
 
   if (isLoading) {
@@ -221,7 +235,7 @@ export default function PatientDashboard() {
           </motion.div>
         </div>
 
-        <PatientAnalytics />
+        <PatientAnalytics appointments={appointments} />
 
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <FileVault doctors={doctors} />

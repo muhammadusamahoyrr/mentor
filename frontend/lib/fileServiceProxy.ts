@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const FILE_SERVICE =
   process.env.FILE_SERVICE_URL ||
-  process.env.NEXT_PUBLIC_FILE_SERVICE_URL ||
   'http://localhost:3005';
 
 export async function proxyToFileService(

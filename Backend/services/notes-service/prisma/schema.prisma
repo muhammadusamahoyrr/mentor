@@ -12,9 +12,15 @@ datasource db {
 
 // Parent side of the one-to-many relationship.
 model Doctor {
-  id             Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  // The auth-service user _id (a Mongo ObjectId). Local rows are upserted from
+  // the JWT / appointment payload, so notes can hang off a real platform user
+  // while the relation below still uses a local integer key.
+  externalId String? @unique
+
   name           String
-  email          String   @unique
+  email          String? @unique
   specialization String?
   createdAt      DateTime @default(now())
 
@@ -24,13 +30,26 @@ model Doctor {
 
 // Child side — each Note belongs to exactly one Doctor (foreign key).
 model Note {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String
+  id      Int    @id @default(autoincrement())
+  title   String
+  content String
+
+  // Set when the note was written against a consultation. Holds the
+  // appointment-service Mongo _id; null for standalone notes.
+  appointmentId String?
+
+  // Whoever actually typed the note — may be the patient, not the doctor the
+  // note is filed under.
+  authorId   String?
+  authorName String?
+  authorRole String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // The relationship: doctorId is the foreign key referencing Doctor.id.
   doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   doctorId Int
+
+  @@index([appointmentId])
 }
