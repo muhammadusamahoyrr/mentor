@@ -22,3 +22,30 @@ exports.authenticate = (req, res, next) => {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
+
+/**
+ * Role-based access control.
+ *
+ * Authentication answers "who are you"; this answers "what may your role do at
+ * all", independent of which record is being touched. The ownership and
+ * appointment-participant checks in the controller are a separate, narrower
+ * question and both still apply on top of this.
+ *
+ *   authorizeRole('doctor')            -> doctors only
+ *   authorizeRole('doctor', 'patient') -> either
+ */
+exports.authorizeRole = (...roles) => {
+  const allowed = roles.flat();
+
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    if (!allowed.includes(req.user.role)) {
+      return res.status(403).json({
+        error: `Access denied: this action requires the role ${allowed.join(' or ')}`,
+      });
+    }
+    next();
+  };
+};

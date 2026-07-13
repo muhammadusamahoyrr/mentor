@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronLeft, PhoneOff, Maximize2, FileText, Video, Save, Check, Plus } from 'lucide-react';
+import { ChevronLeft, PhoneOff, Maximize2, FileText, Video, Save, Check, Plus, Trash2 } from 'lucide-react';
 import { Appointment } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 
@@ -31,6 +31,8 @@ export default function VideoCallPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   // The note the textarea is currently editing. null means "compose a new one".
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -45,6 +47,7 @@ export default function VideoCallPage() {
     (async () => {
       const user = await getCurrentUser();
       if (!active) return;
+      if (user) setCurrentUser({ id: user.id, role: user.role });
 
       try {
         const res = await fetch(`/api/appointments/${id}`);
@@ -130,6 +133,30 @@ export default function VideoCallPage() {
     setNoteContent('');
     setSaveSuccess(false);
   };
+
+  // Completes CRUD from the UI. notes-service restricts DELETE to the doctor
+  // role, so the button is only offered to doctors — the API enforces it anyway.
+  const handleDeleteNote = async () => {
+    if (editingNoteId === null || isDeleting) return;
+    if (!confirm('Delete this clinical note? This cannot be undone.')) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/notes/${editingNoteId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      setSavedNotes(prev => prev.filter(n => n.id !== editingNoteId));
+      setEditingNoteId(null);
+      setNoteContent('');
+    } catch (err) {
+      console.error('Failed to delete note:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const canDelete =
+    editingNoteId !== null && currentUser?.role === 'doctor';
 
   const handleEndSession = () => {
     if (!confirm('Are you sure you want to end this session?')) return;
@@ -254,11 +281,23 @@ export default function VideoCallPage() {
               {editingNoteId !== null && (
                 <button
                   onClick={handleNewNote}
-                  disabled={isSaving}
+                  disabled={isSaving || isDeleting}
                   className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   New
+                </button>
+              )}
+
+              {canDelete && (
+                <button
+                  onClick={handleDeleteNote}
+                  disabled={isSaving || isDeleting}
+                  title="Only a doctor may delete a clinical note"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-rose-50 disabled:opacity-40 border border-rose-200 text-rose-600 rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {isDeleting ? 'Deleting…' : 'Delete'}
                 </button>
               )}
 

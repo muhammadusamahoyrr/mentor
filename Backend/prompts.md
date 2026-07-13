@@ -1,7 +1,9 @@
-# prompts.md — Week 2 Prompt Log
+# prompts.md — Week 2 & Week 3 Prompt Log
 **Intern:** Muhammad Usama
 **Program:** Arbisoft AI-Focused Internship 2026
-**Week:** 2 — Backend, REST, CRUD & ORM
+**Weeks:** 2 — Backend, REST, CRUD & ORM · 3 — Auth, Authorization, API Tests & Integration
+
+> Week 2 is logged first, then [Week 3](#week-3--auth-authorization-api-tests--integration).
 
 This file documents the significant prompts I used while building the **notes-service** during
 Week 2, in the order I used them, with a short note on what I was trying to do and what I
@@ -244,3 +246,212 @@ handling are easy to demonstrate. A `baseUrl` variable makes the port easy to ch
 **Week 2 deliverable:** `notes-service` — a CRUD REST API for the Note resource, modelled with
 Prisma (ORM) on SQLite, with a Doctor → Notes relationship, real migrations, Zod input
 validation, correct HTTP status codes, a clean ESLint pass, and reviewed Jest unit tests.
+
+---
+---
+
+# Week 3 — Auth, Authorization, API Tests & Integration
+
+**Goal:** add JWT authentication and role-based authorization to the Week 2 API, wire the Week 1
+frontend to it so the app works end-to-end, and cover the whole thing with API and integration
+tests.
+
+## The Plan (before I started)
+
+Week 2 left `notes-service` as an island: a working CRUD API with **no auth at all** and **no
+caller** — nothing in the frontend ever hit it. Week 3 is about closing both gaps.
+
+1. **Audit first, don't assume.** Before writing anything, find out which services the frontend is
+   actually talking to. I suspected notes-service was orphaned but wanted evidence.
+2. **Add JWT auth** to every `/api` route, verifying the token auth-service already mints.
+3. **Add role-based authorization** — a rule that depends on *what you are*, not just *what you own*.
+4. **Wire the frontend** to notes-service so the video-call page does real CRUD against it.
+5. **Test it properly**: API tests for auth + CRUD + error paths, and an integration test that runs
+   the happy path across a service boundary.
+
+The interesting design problem I knew was coming: notes-service has its own SQLite database and
+**no appointment data**, so it physically cannot answer "is this caller allowed to see this
+consultation's notes?" on its own. That question has to cross a service boundary.
+
+---
+
+## Day 1 — Auditing what was actually connected
+
+### Prompt 14
+
+> As a senior full stack developer, list the remaining wiring between the frontend and the backend
+> services. Check deeply whether each service is connected to the frontend or not, and list the
+> issues.
+
+**What I was doing:** Establishing ground truth before touching code, rather than trusting my
+memory of what I'd built.
+
+**What I learned:** The audit found more than I expected. `notes-service` was **completely
+orphaned** — the BFF proxy and route existed, but *zero* lines of frontend code called
+`/api/notes`. Worse, the feature it was meant to serve was already implemented twice: the video
+page was saving clinical notes to appointment-service's *own* Mongo `Note` model. Two parallel note
+systems, and the UI used the wrong one.
+
+The lesson: **"I wrote the proxy" is not the same as "it's wired."** Grep for the caller.
+
+---
+
+## Day 2 — Auth, authorization, and the cross-service problem
+
+### Prompt 15
+
+> Wire the video page notes to notes-service.
+
+**What I was doing:** The core Week 3 integration task.
+
+**What I learned:** This was *not* a one-line repoint, and the AI pushed back before writing code —
+correctly. Three things blocked it:
+
+1. **The schema couldn't represent the data.** notes-service's `Note` was
+   `{title, content, doctorId: Int}`. The video page sends a body, an appointment, and an author.
+   No field mapped.
+2. **The foreign key pointed at the wrong universe.** `doctorId` is a SQLite autoincrement `Int`;
+   real doctors are Mongo `ObjectId` strings from auth-service. Nothing connected them.
+3. **There was no auth at all.** `GET /api/notes` would happily return every note belonging to
+   every doctor, to anyone.
+
+I chose to **keep the Prisma one-to-many relation** (it's the Week 2 deliverable) and add
+`Doctor.externalId` — the auth-service user id — so the relation survives while pointing at real
+platform users. The service upserts a local `Doctor` row from the JWT on write.
+
+### Prompt 16
+
+> How should notes-service authorize access, given it can't see appointments?
+
+**What I was doing:** Solving the cross-service authorization problem.
+
+**What I learned:** This is the genuinely interesting bit of Week 3. A JWT proves **who you are**;
+it says nothing about **whether this consultation is yours**. notes-service has no appointment
+table, so it cannot decide.
+
+The answer: **ask the service that owns the data.** notes-service calls
+`GET /api/appointments/:id` on appointment-service, forwarding the caller's own token.
+appointment-service *already* restricts that endpoint to the patient and doctor on the appointment
+— so a `200` coming back **is** the participant check, and a `403` means they have no business
+here. No duplicated logic, one owner per fact.
+
+The cost is real and worth stating: notes now depend on appointment-service being up, and every
+read costs an internal HTTP hop. That's the price of not duplicating the authorization rule.
+
+### Prompt 17 — Role-based authorization
+
+> Add at least one role-based authorization rule.
+
+**What I was doing:** The explicit Week 3 requirement.
+
+**What I learned:** I'd been conflating three *different* questions, and the assignment forced me to
+separate them:
+
+| Question | Mechanism | Example here |
+|---|---|---|
+| Who are you? | **Authentication** (JWT) | `authenticate` — verify the signature |
+| What may your *role* do? | **Authorization (RBAC)** | `authorizeRole('doctor')` |
+| Is this *record* yours? | **Ownership / participation** | author check, appointment participant check |
+
+RBAC is **record-independent**: a patient may not delete a clinical note *no matter whose it is* —
+not even their own. That's a policy about the role, and it's a different rule from "you may only
+edit a note you wrote."
+
+The rules I added:
+
+- `DELETE /api/notes/:id` → **doctors only**. Clinical records are not patient-destroyable. The
+  author check still applies on top, so a doctor can only delete notes *they* wrote.
+- `POST /api/doctors` → **doctors only**.
+
+Both layers stack: role first, then ownership. The frontend hides the Delete button from patients,
+but the API refuses them regardless — **the UI is a convenience, not a security boundary.**
+
+---
+
+## Day 3 — Reviewing the AI's own work
+
+### Prompt 18
+
+> As a senior developer, check again.
+
+**What I was doing:** Asking for an adversarial review of code the AI had just written and declared
+finished.
+
+**What I learned:** **This prompt found a real bug the AI had shipped.** Its `assertCanAccess`
+helper did nothing when a note had no `appointmentId` — the comment even rationalised it
+("standalone notes carry no patient data"). That was an assumption, not a guarantee: any logged-in
+user could read, edit or delete any standalone note.
+
+It had passed its own tests because it only tested the consultation path. **Green tests on the paths
+you thought of prove nothing about the paths you didn't.** I now ask for a second adversarial pass
+as a matter of routine, and specifically ask *which branches were never executed*.
+
+### Prompt 19
+
+> Fix the Postman collection.
+
+**What I was doing:** The Week 2 collection was now broken — every request was unauthenticated, so
+all nine would 401 against the newly secured API.
+
+**What I learned:** Running it caught a subtlety I'd have missed: my "no token → 401" test
+**returned 200**. Cookies are scoped **by domain, not by port** — so once you log in against
+auth-service on `:3001`, Postman's cookie jar sends that same token to notes-service on `:3006`.
+Dropping the `Authorization` header does **not** make you anonymous when the service also accepts a
+cookie. The test was lying, not the service. It now runs *before* login, with the jar cleared.
+
+---
+
+## Day 4 — Tests
+
+### Prompt 20
+
+> Write at least 5 API tests covering auth + CRUD + error paths, and one integration test that runs
+> the happy path end to end.
+
+**What I was doing:** The Week 3 testing requirement.
+
+**What I learned:** The distinction between the test types finally clicked by building them:
+
+- **Unit test** (Week 2, `noteSchema.test.js`) — a pure function. No HTTP, no DB. Does Zod reject an
+  empty title?
+- **API test** (`notes.api.test.js`) — drives the real Express app through **supertest**, over real
+  HTTP, against a real database. Asserts *status codes* and *bodies*: 401 without a token, 403 for
+  the wrong role, 400 for bad input, 404 for a missing parent, 201/200 on success.
+- **Integration test** (`consultation.integration.test.js`) — the same, but **across a service
+  boundary**: a real appointment-service stub listens on a real port, and notes-service really calls
+  it over the wire to make its authorization decision.
+
+Two practical things I'd have got wrong alone:
+
+1. **Tests must not touch the dev database.** `jest.setup.js` overrides `DATABASE_URL` to `test.db`
+   *before* Prisma is constructed (dotenv doesn't overwrite variables that are already set), and
+   `jest.globalSetup.js` runs the **real migrations** against it — so the tests exercise the actual
+   schema, foreign keys and all, not a mock.
+2. **`maxWorkers: 1`.** Jest parallelises by default, and parallel suites sharing one SQLite file
+   truncate each other's tables mid-assertion.
+
+The test I'm most glad I wrote asserts a **negative**: that a refused request left the record
+unchanged. It's not enough that the attacker got a 403 — the data has to still be there afterwards.
+
+---
+
+## Summary — Week 3
+
+| # | Prompt Category | Key Concept Covered |
+|---|---|---|
+| 14 | Integration audit | Finding an orphaned service; "wired" ≠ "a proxy exists" |
+| 15 | Frontend ↔ backend | Schema migration to carry real identity across services |
+| 16 | Cross-service authz | Delegate the check to the service that owns the fact |
+| 17 | **RBAC** | Role vs ownership vs authentication — three distinct questions |
+| 18 | Adversarial review | Asking the AI to re-check itself found a real shipped bug |
+| 19 | API client | Cookies are domain-scoped, not port-scoped |
+| 20 | **API + integration tests** | supertest, isolated test DB, real migrations, negative assertions |
+
+**Total significant prompts logged: 20** (13 in Week 2, 7 in Week 3)
+
+**Week 3 deliverable:** `notes-service` now has **JWT authentication** on every `/api` route, a
+**role-based authorization rule** (`DELETE` is doctors-only) layered on top of ownership and
+appointment-participant checks, and it is **wired to the Week 1 frontend** — the video-call page
+performs full Create / Read / Update / Delete against it with a real login. Covered by **31 backend
+tests**: Zod unit tests, API tests over supertest (auth, RBAC, CRUD, error paths), and an
+integration test that runs the happy path across a live service boundary.
