@@ -11,6 +11,10 @@ const createNoteSchema = z
     appointmentId: z.string().trim().min(1).optional(),
     title: z.string().trim().min(1, 'title is required').max(120),
     content: z.string().trim().min(1, 'content is required'),
+    // Set true by the AI agent (or any AI-drafting caller) so the note is stored
+    // as unreviewed until a doctor confirms it. A real boolean only — z.coerce
+    // would turn the string "false" into true, which is exactly backwards.
+    aiDrafted: z.boolean().optional(),
   })
   .refine((data) => data.doctorId !== undefined || data.appointmentId !== undefined, {
     message: 'Either doctorId or appointmentId must be provided',

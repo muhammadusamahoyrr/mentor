@@ -41,11 +41,14 @@ const assertCanAccess = async (note, req) => {
 
 // CREATE — POST /api/notes
 exports.createNote = asyncHandler(async (req, res) => {
-  const { doctorId, appointmentId, title, content } = req.body;
+  const { doctorId, appointmentId, title, content, aiDrafted } = req.body;
   const author = {
     authorId: req.user.id,
     authorName: req.user.name ?? null,
     authorRole: req.user.role ?? null,
+    // AI-drafted notes are born unreviewed and stay that way until a doctor
+    // confirms them. A human-typed note is reviewed by definition.
+    unreviewed: Boolean(aiDrafted),
   };
 
   // Consultation note: derive the doctor from the appointment, and only once
@@ -70,6 +73,29 @@ exports.createNote = asyncHandler(async (req, res) => {
     data: { doctorId, title, content, ...author },
   });
   res.status(201).json(note);
+});
+
+// CONFIRM — POST /api/notes/:id/confirm
+// A doctor explicitly signs off an AI-drafted note, flipping unreviewed -> false.
+// Doctor-only (route RBAC), and the caller must be able to access the note
+// (participant or owning doctor), so one doctor can't confirm another's note.
+exports.confirmNote = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+
+  const existing = await prisma.note.findUnique({
+    where: { id },
+    include: { doctor: true },
+  });
+  if (!existing) {
+    throw new AppError('Note not found', 404);
+  }
+  await assertCanAccess(existing, req);
+
+  const note = await prisma.note.update({
+    where: { id },
+    data: { unreviewed: false },
+  });
+  res.json(note);
 });
 
 // READ (list) — GET /api/notes?appointmentId=  |  GET /api/notes?doctorId=

@@ -44,6 +44,13 @@ model Note {
   authorName String?
   authorRole String?
 
+  // True when the note was drafted by the AI agent and has NOT yet been
+  // confirmed by a doctor. An unreviewed clinical note must never be presented
+  // as final: studies put the error rate of AI-drafted notes high enough that a
+  // human confirmation step is a safety requirement, not a nicety. Flipped to
+  // false only via POST /api/notes/:id/confirm by a doctor.
+  unreviewed Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

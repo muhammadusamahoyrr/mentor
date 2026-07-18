@@ -1,0 +1,35 @@
+{
+  "name": "agent-service",
+  "version": "1.0.0",
+  "description": "Clinical research agent — Claude function-calling ReAct loop with web-search, file-read and platform skills, a Kafka tool-call hook, Redis session memory and (optional) ChromaDB vector recall",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "ask": "node scripts/ask.js",
+    "make-fixtures": "node scripts/makeInjectionFixture.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --forceExit",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "Muhammad Usama",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.0",
+    "@google/genai": "^2.11.0",
+    "chromadb": "^1.9.4",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "redis": "^6.1.0",
+    "unpdf": "^1.6.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "jest": "^30.4.2",
+    "pdfkit": "^0.19.1",
+    "supertest": "^7.2.2"
+  }
+}

@@ -13,6 +13,7 @@ interface ClinicalNote {
   authorName: string;
   authorRole: string;
   createdAt: string;
+  unreviewed?: boolean;
 }
 
 // notes-service stores a title alongside the body; the editor is a single
@@ -158,6 +159,20 @@ export default function VideoCallPage() {
   const canDelete =
     editingNoteId !== null && currentUser?.role === 'doctor';
 
+  // A doctor signs off an AI-drafted note. Until they do, it stays flagged as
+  // unreviewed and must not be presented as a final clinical record.
+  const confirmNote = async (noteId: number) => {
+    try {
+      const res = await fetch(`/api/notes/${noteId}/confirm`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSavedNotes(prev =>
+        prev.map(n => (n.id === noteId ? { ...n, unreviewed: false } : n)),
+      );
+    } catch (err) {
+      console.error('Failed to confirm note:', err);
+    }
+  };
+
   const handleEndSession = () => {
     if (!confirm('Are you sure you want to end this session?')) return;
     router.back();
@@ -209,25 +224,40 @@ export default function VideoCallPage() {
 
       {/* Main Content */}
       <main className="flex-1 flex p-6 gap-6 min-h-0 overflow-hidden">
-        {/* Video Placeholder */}
+        {/* Video call — Daily prebuilt iframe. GET /api/appointments/:id appends a
+            meeting token (?t=...) to videoUrl when the appointment is confirmed, so
+            the URL is directly embeddable. Until then, show the waiting state. */}
         <div className="flex-[3] flex flex-col min-h-0">
           <div className="flex-1 bg-slate-900 rounded-[2.5rem] overflow-hidden shadow-2xl relative border-8 border-white ring-1 ring-slate-200 flex items-center justify-center">
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a,#1e293b)] opacity-90" />
-            <div className="relative z-10 flex flex-col items-center gap-6 text-center">
-              <div className="p-6 bg-white/10 rounded-3xl backdrop-blur-sm border border-white/10">
-                <Video className="h-16 w-16 text-white/60" />
-              </div>
-              <div>
-                <p className="text-white font-black text-xl tracking-tight">Video Consultation</p>
-                <p className="text-slate-400 text-sm mt-1 font-medium">
-                  {doctorName} · {patientName}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                <span className="h-2 w-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-emerald-400 text-xs font-black uppercase tracking-widest">Session Active</span>
-              </div>
-            </div>
+            {appointment?.videoUrl ? (
+              <iframe
+                src={appointment.videoUrl}
+                title={`Video consultation with ${doctorName} and ${patientName}`}
+                allow="camera; microphone; fullscreen; speaker; display-capture; autoplay"
+                className="absolute inset-0 h-full w-full border-0"
+              />
+            ) : (
+              <>
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a,#1e293b)] opacity-90" />
+                <div className="relative z-10 flex flex-col items-center gap-6 text-center">
+                  <div className="p-6 bg-white/10 rounded-3xl backdrop-blur-sm border border-white/10">
+                    <Video className="h-16 w-16 text-white/60" />
+                  </div>
+                  <div>
+                    <p className="text-white font-black text-xl tracking-tight">Video Consultation</p>
+                    <p className="text-slate-400 text-sm mt-1 font-medium">
+                      {doctorName} · {patientName}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <span className="h-2 w-2 bg-amber-400 rounded-full animate-pulse" />
+                    <span className="text-amber-400 text-xs font-black uppercase tracking-widest">
+                      {loadError ? 'Session unavailable' : 'Video starts once the appointment is confirmed'}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -315,10 +345,29 @@ export default function VideoCallPage() {
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Earlier Notes</p>
               <div className="space-y-2">
                 {otherNotes.map((note, i) => (
-                  <div key={note.id ?? i} className="p-3 bg-slate-50 rounded-xl">
+                  <div
+                    key={note.id ?? i}
+                    className={`p-3 rounded-xl ${note.unreviewed ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50'}`}
+                  >
+                    {note.unreviewed && (
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700">
+                          <FileText className="h-2.5 w-2.5" /> AI draft · unreviewed
+                        </span>
+                        {currentUser?.role === 'doctor' && note.id != null && (
+                          <button
+                            onClick={() => confirmNote(note.id as number)}
+                            className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white hover:bg-emerald-700"
+                          >
+                            <Check className="h-2.5 w-2.5" /> Confirm
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <p className="text-xs text-slate-600 font-medium line-clamp-2">{note.content}</p>
                     <p className="text-[10px] text-slate-400 mt-1">
                       {new Date(note.createdAt).toLocaleTimeString()} · {note.authorName}
+                      {note.unreviewed && ' · not yet confirmed'}
                     </p>
                   </div>
                 ))}

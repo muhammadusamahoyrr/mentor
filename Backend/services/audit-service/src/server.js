@@ -3,15 +3,22 @@ const { Kafka } = require('kafkajs');
 const mongoose = require('mongoose');
 const AuditLog = require('./models/AuditLog');
 
+// SASL only when credentials exist: a local broker takes neither auth nor TLS,
+// and sending an empty username to one is an error rather than a no-op. Matches
+// the other services' kafkaClient.js.
+const useSasl = Boolean(process.env.KAFKA_USERNAME && process.env.KAFKA_PASSWORD);
+
 const kafka = new Kafka({
   clientId: 'audit-service',
-  brokers: [process.env.KAFKA_BROKER],
-  ssl: process.env.KAFKA_SSL === 'true',
-  sasl: {
-    mechanism: process.env.KAFKA_SASL_MECHANISM || 'scram-sha-256',
-    username: process.env.KAFKA_USERNAME,
-    password: process.env.KAFKA_PASSWORD,
-  },
+  brokers: (process.env.KAFKA_BROKERS || process.env.KAFKA_BROKER || 'localhost:9092').split(','),
+  ssl: process.env.KAFKA_SSL ? process.env.KAFKA_SSL === 'true' : useSasl,
+  ...(useSasl && {
+    sasl: {
+      mechanism: process.env.KAFKA_SASL_MECHANISM || 'scram-sha-256',
+      username: process.env.KAFKA_USERNAME,
+      password: process.env.KAFKA_PASSWORD,
+    },
+  }),
 });
 
 const consumer = kafka.consumer({ groupId: 'audit-service-group' });
@@ -33,7 +40,9 @@ const runAuditLogger = async () => {
     console.log('✅ Audit Shadow Logger connected to Kafka');
 
     // Subscribe to ALL topics (Regex subscription)
-    await consumer.subscribe({ topics: [/^(user|appointment)\..*$/], fromBeginning: true });
+    // `agent` added so the clinical research agent's tool-call events
+    // (agent.tool.called) are persisted here as a durable audit trail.
+    await consumer.subscribe({ topics: [/^(user|appointment|agent)\..*$/], fromBeginning: true });
 
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {

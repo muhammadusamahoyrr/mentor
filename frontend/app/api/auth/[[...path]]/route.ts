@@ -19,10 +19,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
   return response;
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
-  return proxyToAuth(request, context);
-}
-
 async function proxyToAuth(request: NextRequest, context: RouteContext) {
   const params = await context.params;
   const path = (params?.path || []).join('/');

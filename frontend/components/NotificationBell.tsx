@@ -27,7 +27,11 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
       console.error('Failed to load user notifications:', err);
     });
 
-    const socketHost = process.env.NEXT_PUBLIC_NOTIFICATION_SOCKET_URL || 'http://localhost:3003';
+    // No env override → assume the notification service runs on port 3003 of the
+    // same host serving the frontend, so LAN/tunnel access works, not just localhost.
+    const socketHost =
+      process.env.NEXT_PUBLIC_NOTIFICATION_SOCKET_URL ||
+      `${window.location.protocol}//${window.location.hostname}:3003`;
     const socket = io(socketHost, {
       transports: ['websocket'],
       withCredentials: true,

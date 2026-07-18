@@ -18,11 +18,12 @@ const SERVICES = [
   { name: 'notification', dir: 'notification-service', port: 3003 },
   { name: 'file',         dir: 'file-service',         port: 3005 },
   { name: 'notes',        dir: 'notes-service',        port: 3006 },
+  { name: 'agent',        dir: 'agent-service',        port: 3007 },
   // Kafka consumer, not an HTTP server -- it has no port to listen on.
   { name: 'audit',        dir: 'audit-service',        port: null },
 ];
 
-const COLORS = [36, 32, 35, 33, 34, 31]; // cyan, green, magenta, yellow, blue, red
+const COLORS = [36, 32, 35, 33, 34, 31, 90]; // cyan, green, magenta, yellow, blue, red, grey
 const paint = (code, s) => `\x1b[${code}m${s}\x1b[0m`;
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 

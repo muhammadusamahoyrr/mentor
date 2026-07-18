@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import FileVault from '@/components/vault/FileVault';
 import DoctorAnalytics from '@/components/analytics/DoctorAnalytics';
 import CalendarModal from '@/components/CalendarModal';
+import AgentPanel from '@/components/AgentPanel';
 import { MedicalFile } from '@/types';
 
 export default function DoctorDashboard() {
@@ -290,6 +291,9 @@ export default function DoctorDashboard() {
           <FileVault externalFiles={doctorFiles} onExternalFilesChange={setDoctorFiles} />
         </motion.div>
       </main>
+
+      {/* Clinical research agent — Week 4 (skills, hooks, memory, streaming). */}
+      <AgentPanel />
 
       <AnimatePresence>
         {calendarOpen && (
