@@ -34,36 +34,76 @@ The browser only ever talks to the Next.js app. Next.js catch-all API routes
 JWT. Services talk to each other over HTTP (forwarding that same JWT) and asynchronously over
 Kafka; the audit-service is a pure Kafka consumer that persists an audit trail.
 
+**Legend** — solid = HTTP request · dotted = internal call with the caller's JWT forwarded · thick = Kafka event.
+
 ```mermaid
-flowchart TD
-    Browser["Browser (Next.js UI)"] -->|/api/*| Next["Next.js proxy routes"]
-    Next --> Auth["auth-service :3001"]
-    Next --> Appt["appointment-service :3002"]
-    Next --> Notif["notification-service :3003"]
-    Next --> File["file-service :3005"]
-    Next --> Notes["notes-service :3006"]
-    Next --> Agent["agent-service :3007"]
+flowchart TB
+    subgraph client["🖥️ Client"]
+        Browser["Browser · Next.js UI"]
+    end
+
+    subgraph gateway["🚪 API Gateway"]
+        Next["Next.js API routes<br/>proxy · forwards JWT"]
+    end
+
+    subgraph svc["⚙️ Backend microservices"]
+        direction LR
+        Auth["auth<br/>:3001"]
+        Appt["appointment<br/>:3002"]
+        Notif["notification<br/>:3003"]
+        File["file<br/>:3005"]
+        Notes["notes<br/>:3006"]
+        Agent["🤖 agent<br/>:3007"]
+        Audit["audit<br/>consumer"]
+    end
+
+    subgraph ext["🌐 External / AI"]
+        direction LR
+        LLM["Claude / Gemini"]
+        Brave["Brave Search"]
+        Daily["Daily.co"]
+    end
+
+    subgraph data["🗄️ Data stores"]
+        direction LR
+        Mongo[("MongoDB")]
+        SQLite[("SQLite · Prisma")]
+        Redis[("Redis")]
+        Chroma[("ChromaDB")]
+    end
+
+    Bus{{"📨 Kafka event bus"}}
+
+    Browser -->|"/api/*"| Next
     Browser -.->|websocket| Notif
+    Next --> Auth & Appt & Notif & File & Notes & Agent
 
-    Agent -->|forwards caller JWT| File
-    Agent --> Notes
-    Agent --> Appt
-    Agent -->|LLM| LLM["Claude / Gemini"]
-    Agent -->|web search| Brave["Brave Search"]
-    Agent -->|RAG| Chroma["ChromaDB"]
+    Agent -.->|caller JWT| File & Notes & Appt
+    Agent --> LLM & Brave & Chroma
+    Appt --> Daily
 
-    Auth -->|Kafka| Kafka(["Kafka"])
-    Appt -->|Kafka| Kafka
-    Agent -->|agent.tool.called| Kafka
-    Kafka --> Audit["audit-service (consumer)"]
+    Auth & Appt & Agent ==>|events| Bus
+    Bus ==> Audit
 
-    Auth --> Mongo[("MongoDB")]
-    Appt --> Mongo
-    Notif --> Mongo
-    File --> Mongo
-    Audit --> Mongo
-    Notes --> SQLite[("SQLite / Prisma")]
-    Agent --> Redis[("Redis sessions")]
+    Auth & Appt & Notif & File & Audit --> Mongo
+    Notes --> SQLite
+    Agent --> Redis
+
+    classDef cClient fill:#e3f2fd,stroke:#1976d2,color:#0d47a1;
+    classDef cGateway fill:#ede7f6,stroke:#5e35b1,color:#311b92;
+    classDef cSvc fill:#f1f8e9,stroke:#558b2f,color:#33691e;
+    classDef cAgent fill:#fff3e0,stroke:#ef6c00,color:#e65100,font-weight:bold;
+    classDef cExt fill:#fce4ec,stroke:#c2185b,color:#880e4f;
+    classDef cData fill:#eceff1,stroke:#455a64,color:#263238;
+    classDef cBus fill:#fffde7,stroke:#f9a825,color:#f57f17,font-weight:bold;
+
+    class Browser cClient;
+    class Next cGateway;
+    class Auth,Appt,Notif,File,Notes,Audit cSvc;
+    class Agent cAgent;
+    class LLM,Brave,Daily cExt;
+    class Mongo,SQLite,Redis,Chroma cData;
+    class Bus cBus;
 ```
 
 ## Services
