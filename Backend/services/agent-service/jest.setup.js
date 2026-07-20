@@ -5,6 +5,13 @@ const path = require('path');
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 process.env.AGENT_DOCS_DIR = path.join(__dirname, 'src', '__tests__', 'fixtures');
 
+// Pin the provider to Anthropic — the integration suites mock @anthropic-ai/sdk.
+// Requiring server.js runs dotenv.config(), which loads a real GEMINI_API_KEY from
+// .env; without this, resolveProvider() would auto-pick Gemini and the tests would
+// hit the live API (non-deterministic + rate-limited). dotenv never overrides an
+// already-set var, so this wins. Tests must never call the network.
+process.env.AGENT_PROVIDER = 'anthropic';
+
 // Leave ANTHROPIC_API_KEY / BRAVE_API_KEY unset on purpose: the loop tests inject
 // a fake client, and the web_search test asserts the no-key guard fires.
 delete process.env.BRAVE_API_KEY;
