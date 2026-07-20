@@ -1,11 +1,11 @@
-const { resolveProvider, defaultModel } = require('../src/agent/providers');
+const { resolveProvider, defaultModel } = require('../agent/providers/factory');
 const {
   toGeminiTools,
   toGeminiContents,
   toAnthropicMessage,
-} = require('../src/agent/providers/translate');
-const { GeminiClient, cleanGeminiError } = require('../src/agent/providers/gemini');
-const { runAgent } = require('../src/agent/loop');
+} = require('../agent/providers/translate');
+const { GeminiClient, cleanGeminiError } = require('../agent/providers/gemini');
+const { runAgent } = require('../agent/loop');
 
 // A fake @google/genai instance: scripts responses with .text and .functionCalls.
 function fakeGenai(script) {

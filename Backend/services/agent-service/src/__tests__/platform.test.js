@@ -1,7 +1,7 @@
-const getAppointment = require('../src/agent/tools/getAppointment');
-const listPatientFiles = require('../src/agent/tools/listPatientFiles');
-const readPatientFile = require('../src/agent/tools/readPatientFile');
-const memory = require('../src/memory/session');
+const getAppointment = require('../agent/tools/getAppointment');
+const listPatientFiles = require('../agent/tools/listPatientFiles');
+const readPatientFile = require('../agent/tools/readPatientFile');
+const memory = require('../memory/session');
 
 // Minimal fetch Response stub.
 function res({ status = 200, json, buffer, contentType }) {

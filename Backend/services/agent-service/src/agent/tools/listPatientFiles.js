@@ -1,7 +1,7 @@
 // list_patient_files skill — lists the medical documents patients have shared
 // with this doctor (file-service scopes GET /api/files/my to the caller). Use it
 // to discover which document to read before calling read_patient_file.
-const { requireToken, authHeaders } = require('./_serviceUtil');
+const { requireToken, authHeaders } = require('./serviceClient');
 
 const BASE = process.env.FILE_SERVICE_URL || 'http://localhost:3005';
 

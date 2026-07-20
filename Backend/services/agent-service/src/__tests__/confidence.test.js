@@ -4,7 +4,7 @@ const {
   dataFloor,
   isThinResult,
   LOW_PREFIX,
-} = require('../src/agent/confidence');
+} = require('../agent/confidence');
 
 describe('parseConfidence', () => {
   it('extracts and strips a trailing CONFIDENCE line', () => {

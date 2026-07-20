@@ -1,5 +1,5 @@
-const { buildSystemPrompt } = require('../src/agent/systemPrompt');
-const { runAgent } = require('../src/agent/loop');
+const { buildSystemPrompt } = require('../agent/systemPrompt');
+const { runAgent } = require('../agent/loop');
 
 // A fake client that captures the `system` prompt sent to the model.
 function capturingClient(answer = 'respuesta') {

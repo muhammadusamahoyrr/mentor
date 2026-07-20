@@ -1,11 +1,11 @@
 // retrieve_docs skill: embeddings mocked, Chroma faked. Proves the skill's own
 // PHI guard and that it scopes retrieval by both patientId and the caller doctor.
-jest.mock('../src/vector/embed', () => ({
+jest.mock('../vector/embed', () => ({
   embed: jest.fn(async (texts) => texts.map(() => [0.1, 0.2, 0.3])),
 }));
 
-const chroma = require('../src/vector/chroma');
-const retrieveDocs = require('../src/agent/tools/retrieveDocs');
+const chroma = require('../vector/chroma');
+const retrieveDocs = require('../agent/tools/retrieveDocs');
 const { makeFakeChroma } = require('./fakeChroma');
 
 describe('retrieve_docs skill', () => {

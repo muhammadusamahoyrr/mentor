@@ -4,7 +4,7 @@
 const registry = require('./tools/registry');
 const { buildSystemPrompt } = require('./systemPrompt');
 const { isThinResult } = require('./confidence');
-const { createClient, defaultModel } = require('./providers');
+const { createClient, defaultModel } = require('./providers/factory');
 
 const MAX_STEPS = Number(process.env.AGENT_MAX_STEPS || 6); // guardrail: cap tool loops so a runaway can't burn the budget
 const MAX_TOKENS = 2048;

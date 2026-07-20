@@ -1,7 +1,7 @@
 // get_appointment skill — reads a telemedicine appointment from appointment-service
 // on the caller's behalf. appointment-service restricts this to the appointment's
 // participants, so a 200 back IS the participant check.
-const { requireToken, authHeaders } = require('./_serviceUtil');
+const { requireToken, authHeaders } = require('./serviceClient');
 
 const BASE = process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3002';
 

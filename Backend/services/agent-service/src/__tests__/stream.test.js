@@ -1,5 +1,5 @@
-const { runAgentStream } = require('../src/agent/loop');
-const { createToolLogger } = require('../src/hooks/toolLogger');
+const { runAgentStream } = require('../agent/loop');
+const { createToolLogger } = require('../hooks/toolLogger');
 
 // Fake streaming Anthropic client: each messages.stream() call returns a stream
 // object whose finalMessage() replays text deltas (to the 'text' handler) then

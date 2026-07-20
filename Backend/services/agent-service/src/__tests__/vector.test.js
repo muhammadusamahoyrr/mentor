@@ -1,6 +1,6 @@
-const { chunk } = require('../src/vector/chunk');
-const embed = require('../src/vector/embed');
-const chroma = require('../src/vector/chroma');
+const { chunk } = require('../vector/chunk');
+const embed = require('../vector/embed');
+const chroma = require('../vector/chroma');
 const { makeFakeChroma } = require('./fakeChroma');
 
 describe('chunk', () => {

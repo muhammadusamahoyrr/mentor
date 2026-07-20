@@ -18,7 +18,7 @@ jest.mock(
 
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
-const app = require('../src/server');
+const app = require('../server');
 
 const sign = (payload) => jwt.sign(payload, process.env.JWT_SECRET);
 

@@ -3,7 +3,7 @@ const path = require('path');
 // Jest does not read .env. Supply test-only values so modules that fail loudly
 // on a missing secret (utils/jwt) can load, and point read_file at fixtures.
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
-process.env.AGENT_DOCS_DIR = path.join(__dirname, '__tests__', 'fixtures');
+process.env.AGENT_DOCS_DIR = path.join(__dirname, 'src', '__tests__', 'fixtures');
 
 // Leave ANTHROPIC_API_KEY / BRAVE_API_KEY unset on purpose: the loop tests inject
 // a fake client, and the web_search test asserts the no-key guard fires.

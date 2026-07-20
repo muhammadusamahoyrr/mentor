@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { asyncHandler } = require('../../../../shared/middleware/errorHandler');
 const { runAgent, runAgentStream } = require('../agent/loop');
 const { createToolLogger } = require('../hooks/toolLogger');
-const { kafkaSink } = require('../hooks/auditSink');
+const { kafkaSink } = require('../events/auditSink');
 const { parseConfidence, resolveConfidence, LOW_PREFIX } = require('../agent/confidence');
 const memory = require('../memory/session');
 

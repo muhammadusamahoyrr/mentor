@@ -1,8 +1,8 @@
-const registry = require('../src/agent/tools/registry');
-const readFile = require('../src/agent/tools/readFile');
-const webSearch = require('../src/agent/tools/webSearch');
-const { createToolLogger } = require('../src/hooks/toolLogger');
-const { runAgent } = require('../src/agent/loop');
+const registry = require('../agent/tools/registry');
+const readFile = require('../agent/tools/readFile');
+const webSearch = require('../agent/tools/webSearch');
+const { createToolLogger } = require('../hooks/toolLogger');
+const { runAgent } = require('../agent/loop');
 
 describe('skill registry', () => {
   it('registers web_search and read_file with valid schemas and no duplicate names', () => {

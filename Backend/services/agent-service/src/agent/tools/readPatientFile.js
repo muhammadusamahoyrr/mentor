@@ -1,7 +1,7 @@
 // read_patient_file skill — streams a real medical document from file-service by
 // id and extracts its text. Binary-safe: reads the bytes as an ArrayBuffer (never
 // response.text(), which would corrupt a PDF by decoding it as UTF-8).
-const { requireToken, authHeaders } = require('./_serviceUtil');
+const { requireToken, authHeaders } = require('./serviceClient');
 const injectionGuard = require('../../security/injectionGuard');
 
 const BASE = process.env.FILE_SERVICE_URL || 'http://localhost:3005';
