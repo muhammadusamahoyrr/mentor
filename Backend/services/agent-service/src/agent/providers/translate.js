@@ -44,7 +44,11 @@ function toGeminiContents(messages = []) {
       if (b.type === 'text') {
         parts.push({ text: b.text });
       } else if (b.type === 'tool_use') {
-        parts.push({ functionCall: { name: b.name, args: b.input || {} } });
+        // Echo Gemini's thoughtSignature back on the functionCall part it belongs
+        // to. Gemini 3 rejects the turn without it (400, missing thought_signature).
+        const part = { functionCall: { name: b.name, args: b.input || {} } };
+        if (b.thoughtSignature) part.thoughtSignature = b.thoughtSignature;
+        parts.push(part);
       } else if (b.type === 'tool_result') {
         let response;
         try {
@@ -76,7 +80,11 @@ function toAnthropicMessage({ text, functionCalls = [] } = {}) {
     const key = `${fc.name}:${JSON.stringify(fc.args || {})}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    content.push({ type: 'tool_use', id: nextId(), name: fc.name, input: fc.args || {} });
+    const block = { type: 'tool_use', id: nextId(), name: fc.name, input: fc.args || {} };
+    // Preserve Gemini's per-call thoughtSignature so the loop can echo it back on
+    // the next turn (see toGeminiContents). Anthropic ignores the extra field.
+    if (fc.thoughtSignature) block.thoughtSignature = fc.thoughtSignature;
+    content.push(block);
   }
 
   const hasCall = content.some((b) => b.type === 'tool_use');

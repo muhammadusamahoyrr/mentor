@@ -4,6 +4,84 @@
 // in translate.js; this file is only the SDK glue.
 const { toGeminiTools, toGeminiContents, toAnthropicMessage } = require('./translate');
 
+// Pull functionCall parts out of a response (or a stream chunk), preserving each
+// part's thoughtSignature. Gemini 3 attaches an opaque thoughtSignature to every
+// functionCall it emits and REQUIRES it back, verbatim, on that same functionCall
+// part in the next turn — otherwise it rejects the follow-up with 400 "Function
+// call is missing a thought_signature in functionCall parts". The convenience
+// `.functionCalls` getter drops the signature, so we read the raw candidate parts
+// when the SDK gives them to us, and fall back to the getter otherwise (injected
+// test doubles model `.functionCalls` directly and carry no candidates).
+function functionCallsWithSignatures(resp) {
+  const parts = resp?.candidates?.[0]?.content?.parts;
+  if (Array.isArray(parts)) {
+    const calls = [];
+    for (const p of parts) {
+      if (!p.functionCall) continue;
+      calls.push(
+        p.thoughtSignature
+          ? { ...p.functionCall, thoughtSignature: p.thoughtSignature }
+          : { ...p.functionCall }
+      );
+    }
+    return calls;
+  }
+  return resp?.functionCalls || [];
+}
+
+// Turn a raw @google/genai SDK error into a short, human-readable Error. The SDK
+// surfaces failures as a JSON blob in `err.message` (code, status, nested detail
+// objects) — dumped straight into the chat panel it's unreadable. We parse it and
+// give a plain sentence, with special-casing for the one users actually hit: 429
+// RESOURCE_EXHAUSTED (free-tier requests/minute), including the API's retry hint.
+function cleanGeminiError(err) {
+  const raw = err && err.message ? String(err.message) : String(err);
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const brace = raw.indexOf('{');
+    if (brace !== -1) {
+      try {
+        parsed = JSON.parse(raw.slice(brace));
+      } catch {
+        /* not JSON — leave parsed null, fall through to raw text */
+      }
+    }
+  }
+
+  const info = (parsed && parsed.error) || parsed || {};
+  const code = info.code || err?.status || err?.code;
+  const status = info.status;
+  const apiMessage = info.message;
+
+  if (code === 429 || status === 'RESOURCE_EXHAUSTED') {
+    let retry = '';
+    const details = Array.isArray(info.details) ? info.details : [];
+    const retryInfo = details.find((d) => String(d['@type'] || '').includes('RetryInfo'));
+    if (retryInfo && retryInfo.retryDelay) {
+      retry = ` Please retry in ~${retryInfo.retryDelay}.`;
+    } else {
+      const m = /retry in ([\d.]+)s/i.exec(apiMessage || '');
+      if (m) retry = ` Please retry in ~${Math.ceil(Number(m[1]))}s.`;
+    }
+    const e = new Error(
+      `Rate limit reached on the Gemini free tier (only a few requests per minute, and one agent question uses several).${retry}`
+    );
+    e.status = 429;
+    e.code = 'rate_limited';
+    return e;
+  }
+
+  if (apiMessage) {
+    const e = new Error(`Gemini error${code ? ` (${code})` : ''}: ${apiMessage}`);
+    if (code) e.status = code;
+    return e;
+  }
+
+  return err; // unrecognised shape — pass the original through untouched
+}
+
 class GeminiClient {
   // `genai` is an injectable @google/genai instance (tests); otherwise the real
   // SDK is loaded lazily via dynamic import (it is ESM-only).
@@ -42,8 +120,13 @@ class GeminiClient {
 
   async _create(params) {
     const ai = await this._ai();
-    const resp = await ai.models.generateContent(this._request(params));
-    return toAnthropicMessage({ text: resp.text, functionCalls: resp.functionCalls || [] });
+    let resp;
+    try {
+      resp = await ai.models.generateContent(this._request(params));
+    } catch (err) {
+      throw cleanGeminiError(err);
+    }
+    return toAnthropicMessage({ text: resp.text, functionCalls: functionCallsWithSignatures(resp) });
   }
 
   _stream(params) {
@@ -56,15 +139,19 @@ class GeminiClient {
       },
       finalMessage: async () => {
         const ai = await self._ai();
-        const stream = await ai.models.generateContentStream(self._request(params));
         let text = '';
         const functionCalls = [];
-        for await (const chunk of stream) {
-          if (chunk.text) {
-            text += chunk.text;
-            textCb(chunk.text);
+        try {
+          const stream = await ai.models.generateContentStream(self._request(params));
+          for await (const chunk of stream) {
+            if (chunk.text) {
+              text += chunk.text;
+              textCb(chunk.text);
+            }
+            for (const fc of functionCallsWithSignatures(chunk)) functionCalls.push(fc);
           }
-          for (const fc of chunk.functionCalls || []) functionCalls.push(fc);
+        } catch (err) {
+          throw cleanGeminiError(err);
         }
         return toAnthropicMessage({ text, functionCalls });
       },
@@ -73,4 +160,4 @@ class GeminiClient {
   }
 }
 
-module.exports = { GeminiClient };
+module.exports = { GeminiClient, cleanGeminiError };

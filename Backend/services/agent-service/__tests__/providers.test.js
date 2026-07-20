@@ -4,7 +4,7 @@ const {
   toGeminiContents,
   toAnthropicMessage,
 } = require('../src/agent/providers/translate');
-const { GeminiClient } = require('../src/agent/providers/gemini');
+const { GeminiClient, cleanGeminiError } = require('../src/agent/providers/gemini');
 const { runAgent } = require('../src/agent/loop');
 
 // A fake @google/genai instance: scripts responses with .text and .functionCalls.
@@ -106,6 +106,83 @@ describe('Anthropic <-> Gemini translation', () => {
     expect(msg.content[0]).toEqual({ type: 'text', text: 'here' });
 
     expect(toAnthropicMessage({ text: 'done', functionCalls: [] }).stop_reason).toBe('end_turn');
+  });
+
+  it('round-trips a Gemini thoughtSignature so it is echoed back on the functionCall part', () => {
+    // Gemini 3 emits an opaque thoughtSignature on each functionCall and rejects
+    // the next turn (400) unless it comes back on that same part.
+    const msg = toAnthropicMessage({
+      text: '',
+      functionCalls: [{ name: 'list_patient_files', args: {}, thoughtSignature: 'sig-abc' }],
+    });
+    const toolUse = msg.content.find((b) => b.type === 'tool_use');
+    expect(toolUse.thoughtSignature).toBe('sig-abc');
+
+    const contents = toGeminiContents([{ role: 'assistant', content: [toolUse] }]);
+    expect(contents[0].parts[0]).toEqual({
+      functionCall: { name: 'list_patient_files', args: {} },
+      thoughtSignature: 'sig-abc',
+    });
+  });
+
+  it('preserves the signature from raw candidate parts through the Gemini adapter', async () => {
+    // Real SDK shape: signature lives on the part, beside functionCall — not on
+    // the `.functionCalls` convenience getter.
+    const client = new GeminiClient({
+      genai: fakeGenai([
+        {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { functionCall: { name: 'list_patient_files', args: {} }, thoughtSignature: 'sig-xyz' },
+                ],
+              },
+            },
+          ],
+        },
+      ]),
+    });
+    const resp = await client.messages.create({
+      model: 'gemini-2.5-flash',
+      system: 's',
+      tools: [],
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(resp.content.find((b) => b.type === 'tool_use').thoughtSignature).toBe('sig-xyz');
+  });
+});
+
+describe('cleanGeminiError', () => {
+  it('turns a 429 RESOURCE_EXHAUSTED blob into a short message with the retry hint', () => {
+    const err = new Error(
+      JSON.stringify({
+        error: {
+          code: 429,
+          message: 'You exceeded your current quota. Please retry in 54.52004492s.',
+          status: 'RESOURCE_EXHAUSTED',
+          details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '54s' }],
+        },
+      })
+    );
+    const clean = cleanGeminiError(err);
+    expect(clean.status).toBe(429);
+    expect(clean.code).toBe('rate_limited');
+    expect(clean.message).toMatch(/rate limit/i);
+    expect(clean.message).toContain('54s');
+    expect(clean.message).not.toContain('{'); // no raw JSON leaks through
+  });
+
+  it('surfaces the human message for other API errors', () => {
+    const err = new Error(JSON.stringify({ error: { code: 400, message: 'Invalid argument', status: 'INVALID_ARGUMENT' } }));
+    const clean = cleanGeminiError(err);
+    expect(clean.status).toBe(400);
+    expect(clean.message).toBe('Gemini error (400): Invalid argument');
+  });
+
+  it('passes an unrecognised error through untouched', () => {
+    const err = new Error('socket hang up');
+    expect(cleanGeminiError(err)).toBe(err);
   });
 });
 
