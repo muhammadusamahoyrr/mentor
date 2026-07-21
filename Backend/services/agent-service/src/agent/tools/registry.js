@@ -1,6 +1,8 @@
 // The skill (tool) registry. Each skill module exports { definition, handler }.
-// Phase 2 adds the platform skills (readFile→file-service, getVitals,
-// getAppointment) and Phase 4 adds retrieveDocs; they all register here.
+// Phase 1 ships web_search and the local read_file. Phase 2 adds the platform
+// skills that call sibling services with the caller's JWT (read_patient_file and
+// list_patient_files → file-service, get_appointment → appointment-service).
+// Phase 4 adds retrieve_docs (ChromaDB vector recall). They all register here.
 const webSearch = require('./webSearch');
 const readFile = require('./readFile');
 const getAppointment = require('./getAppointment');
