@@ -12,6 +12,10 @@ went agent-service → MCP → Brave → grounded answer with a parsed source, a
 trace stitched across BOTH processes via Redis. See §8 for what that run
 uncovered.
 
+**⚠️ One open bug blocks the browser: §6b — Gemini 3.x tool calls fail on the
+SSE path.** Use OpenRouter or Anthropic until it is fixed. Everything else
+below is working and tested.
+
 ---
 
 ## 1. The one-line summary
@@ -279,6 +283,74 @@ Backend/services/agent-service/src/agent/
 - **Repo paths are `Backend/` (capital B).** `git add backend/...` silently
   no-ops on Windows.
 - **Windows has no `python3`**; use Node or the edit tools for scripted rewrites.
+
+## 6b. ⚠️ KNOWN BUG — Gemini 3.x tool calls fail on the STREAMING path
+
+**Status: open, unfixed. Blocks tool-using questions in the browser.**
+Found 2026-07-21; not fixed because it can only be reproduced against a live
+Gemini 3.x key and the quota was exhausted. Do not ship a fix without verifying
+it live — this is precisely the class of bug that unit tests cannot catch.
+
+### Symptom
+
+In the UI (SSE), a question that calls a tool dies on the SECOND turn:
+
+```
+Gemini error (400): Function call is missing a thought_signature in
+functionCall parts. ... function call `default_api:web_search`, position 2
+```
+
+The `session` and `tool` events arrive, then an `error` event. The non-streaming
+JSON path is FINE — which is why every check in this repo missed it. The browser
+is the only caller that uses SSE.
+
+### Cause
+
+Gemini 3.x attaches an opaque `thoughtSignature` to each `functionCall` it emits
+and requires it back, verbatim, on that same call in the next turn. The code does
+handle this (`functionCallsWithSignatures` in `providers/gemini.js`, echoed by
+`toGeminiContents` in `providers/translate.js`) — but it pairs signature to call
+WITHIN ONE RESPONSE OBJECT:
+
+```js
+for (const p of parts) {
+  if (!p.functionCall) continue;
+  calls.push(p.thoughtSignature ? { ...p.functionCall, thoughtSignature: p.thoughtSignature }
+                                : { ...p.functionCall });
+}
+```
+
+In a single non-streaming response the signature and the call sit on the same
+part, so it works. In a STREAM the parts arrive split across chunks, and a
+`functionCall` can land in a chunk whose part carries no signature — so the
+signature is dropped and the follow-up turn is rejected.
+
+### Proposed fix (unverified)
+
+In `gemini.js` `_stream`, remember the most recent `thoughtSignature` seen on ANY
+part and attach it to a `functionCall` that arrives without one, rather than
+reading both from the same part. Then assert in a test with a fake stream that
+splits the signature and the call across two chunks.
+
+### How to verify
+
+Needs a live Gemini 3.x key with quota. Reproduce with the SSE path — a JSON
+request will pass even while the bug is present:
+
+```bash
+curl -N -X POST http://localhost:3007/api/agent/ask \
+  -H 'Accept: text/event-stream' -H 'Authorization: Bearer <doctor JWT>' \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"Search the web for the NICE NG136 guideline."}'
+```
+
+### Workaround until fixed
+
+Run the agent on a provider that does not use thought signatures — OpenRouter
+(`AGENT_PROVIDERS=openrouter`) or Anthropic. The fallback chain reaches
+OpenRouter automatically when Gemini errors, but NOT for this: a 400 is
+deliberately not retried, because a malformed request fails identically
+everywhere. That rule is right in general and unhelpful here.
 
 ## 7. Not done
 
