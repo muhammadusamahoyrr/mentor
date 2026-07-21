@@ -18,20 +18,49 @@ import {
   ShieldCheck,
   Maximize2,
   Minimize2,
+  Link2,
+  Activity,
+  ChevronDown,
+  ChevronRight,
+  RotateCcw,
 } from 'lucide-react';
 
 // The panel streams from POST /api/agent/ask (SSE). Events: session, token,
 // tool (phase start/end), done, error. The live tool row IS the hook log, made
 // visible: each skill call the agent makes shows up as it happens.
+//
+// `done` also carries the validated answer trailer (`sources`) and the `runId`,
+// which addresses the full recorded trace at GET /api/agent/traces/:runId — the
+// steps this service planned PLUS the ones the MCP server actually executed.
 
 type FinishedTool = { tool: string; ms?: number; ok?: boolean };
 type LiveTool = { tool: string; running: boolean; ms?: number; ok?: boolean };
 type Confidence = 'high' | 'medium' | 'low';
+type Source = { title: string; ref: string };
+type TraceStep = {
+  ts?: string;
+  service?: string;
+  type?: string;
+  phase?: string;
+  tool?: string;
+  ok?: boolean;
+  ms?: number;
+  error?: string;
+  question?: string;
+  confidence?: string;
+  steps?: number;
+  stopReason?: string;
+  args?: Record<string, unknown>;
+  output?: Record<string, unknown> | null;
+  injectionFlagged?: boolean;
+};
 type Message = {
   role: 'user' | 'assistant';
   content: string;
   tools?: FinishedTool[];
   confidence?: Confidence;
+  sources?: Source[];
+  runId?: string;
 };
 type Dock = 'side' | 'wide';
 
@@ -124,6 +153,209 @@ function ToolStepper({ tools }: { tools: LiveTool[] }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// The validated `sources` from the answer trailer. These are what the agent says
+// it actually used — a URL for web results, a filename/id for a patient document.
+function SourceList({ sources }: { sources: Source[] }) {
+  const isUrl = (ref: string) => /^https?:\/\//i.test(ref);
+  return (
+    <div className="mt-3 rounded-2xl border border-black/5 bg-surface p-3">
+      <div className="mb-2 flex items-center gap-2 text-[11px] font-bold text-ghost">
+        <Link2 className="h-3.5 w-3.5" />
+        Sources
+      </div>
+      <ul className="space-y-1.5">
+        {sources.map((s, i) => (
+          <li key={i} className="text-[12.5px] leading-snug">
+            {isUrl(s.ref) ? (
+              <a
+                href={s.ref}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-semibold text-indigo-600 underline-offset-2 hover:underline"
+              >
+                {s.title}
+              </a>
+            ) : (
+              <span className="font-semibold text-ink">{s.title}</span>
+            )}
+            <span className="ml-1.5 break-all text-[11px] text-ghost">{s.ref}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// One step in the trace. A step that carries inputs or an output summary can be
+// expanded — "what did that tool actually return?" is most of the reason to open
+// a trace at all, so the data has to be reachable, not just the timing.
+function TraceRow({ step, label, detail }: { step: TraceStep; label: string; detail: string }) {
+  const [open, setOpen] = useState(false);
+  const hasDetail = !!step.args || !!step.output;
+  const failed = step.ok === false || step.phase === 'error';
+
+  return (
+    <li className="text-[12px] leading-snug">
+      <div className="flex items-baseline gap-2">
+        <span
+          className={`mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full ${failed ? 'bg-red-400' : 'bg-indigo-400'}`}
+          aria-hidden
+        />
+        {hasDetail ? (
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="shrink-0 font-semibold text-ink underline-offset-2 hover:underline"
+            title={open ? 'Hide inputs / output' : 'Show inputs / output'}
+          >
+            {label}
+          </button>
+        ) : (
+          <span className="shrink-0 font-semibold text-ink">{label}</span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-ghost">{detail}</span>
+        {step.injectionFlagged && (
+          <span
+            className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-700"
+            title="Prompt-injection signature found in this content — it was neutralized before the model saw it."
+          >
+            injection
+          </span>
+        )}
+        {step.service && (
+          <span className="shrink-0 rounded-full bg-card px-1.5 py-0.5 text-[9.5px] font-semibold text-ghost">
+            {step.service.replace('-service', '').replace('healthcare-', '')}
+          </span>
+        )}
+      </div>
+
+      {open && hasDetail && (
+        <div className="ml-3.5 mt-1 space-y-1.5 border-l border-black/10 pl-2.5">
+          {step.args && (
+            <div>
+              <p className="text-[9.5px] font-bold uppercase tracking-wider text-ghost">Input</p>
+              <pre className="mt-0.5 overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-ink">
+                {JSON.stringify(step.args, null, 2)}
+              </pre>
+            </div>
+          )}
+          {step.output && (
+            <div>
+              <p className="text-[9.5px] font-bold uppercase tracking-wider text-ghost">Output</p>
+              <pre className="mt-0.5 overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-ink">
+                {JSON.stringify(step.output, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+// The recorded trace for one run, fetched on demand. This is the debugging
+// surface: it shows who did what, in order, across BOTH processes — the planning
+// that happened in agent-service and the tool calls that ran inside the MCP
+// server. Replay = reading this tree back, plus re-asking the same question
+// (an LLM will not reproduce identical text, but the failure pattern reproduces).
+function TraceView({ runId, onRerun }: { runId: string; onRerun?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [steps, setSteps] = useState<TraceStep[] | null>(null);
+  const [services, setServices] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (!next || steps || loading) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/agent/traces/${encodeURIComponent(runId)}`);
+      if (!res.ok) {
+        setError(res.status === 404 ? 'This trace has expired.' : `Could not load trace (${res.status}).`);
+        return;
+      }
+      const data = await res.json();
+      setSteps(data.steps ?? []);
+      setServices(data.services ?? []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const label = (s: TraceStep) => {
+    if (s.type === 'run' && s.phase === 'start') return 'Run started';
+    if (s.type === 'run' && s.phase === 'end') return 'Run finished';
+    if (s.type === 'run' && s.phase === 'error') return 'Run failed';
+    return prettyTool(s.tool ?? 'step');
+  };
+
+  const detail = (s: TraceStep) => {
+    if (s.type === 'run' && s.phase === 'start') return s.question ?? '';
+    if (s.type === 'run' && s.phase === 'end')
+      return `${s.confidence ?? '—'} confidence · ${s.steps ?? 0} step(s) · ${s.stopReason ?? ''}`;
+    if (s.error) return s.error;
+    // 'call' is the agent's own view of a tool it requested; 'start'/'end' are
+    // the MCP server actually running it.
+    if (s.phase === 'call') return `requested · ${s.ms ?? 0}ms round trip`;
+    if (s.phase === 'start') return 'executing…';
+    return `${s.ms ?? 0}ms`;
+  };
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggle}
+          className="inline-flex items-center gap-1 text-[11px] font-bold text-ghost transition hover:text-ink"
+        >
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          <Activity className="h-3.5 w-3.5" />
+          View trace
+        </button>
+        {onRerun && (
+          <button
+            onClick={onRerun}
+            title="Ask the same question again"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-ghost transition hover:text-ink"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Re-run
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-2 rounded-2xl border border-black/5 bg-surface p-3">
+          {loading && (
+            <div className="flex items-center gap-2 text-[12px] text-ghost">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading trace…
+            </div>
+          )}
+          {error && <p className="text-[12px] text-amber-700">{error}</p>}
+
+          {steps && !loading && !error && (
+            <>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-ghost">
+                {steps.length} step(s) · {services.join(' + ') || 'agent-service'}
+              </p>
+              <ol className="space-y-1">
+                {steps.map((s, i) => (
+                  <TraceRow key={i} step={s} label={label(s)} detail={detail(s)} />
+                ))}
+              </ol>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -275,6 +507,8 @@ export default function AgentPanel() {
             const answer = (d?.answer as string) ?? '';
             const tools = (d?.tools as FinishedTool[]) ?? [];
             const confidence = d?.confidence as Confidence | undefined;
+            const sources = (d?.sources as Source[]) ?? [];
+            const runId = d?.runId as string | undefined;
             setMessages((m) => {
               if (!m.length) return m;
               const last = m[m.length - 1];
@@ -284,6 +518,8 @@ export default function AgentPanel() {
                   ...last,
                   content: answer || last.content,
                   confidence,
+                  sources,
+                  runId,
                   tools: tools.map((tl) => ({ tool: tl.tool, ms: tl.ms, ok: tl.ok })),
                 },
               ];
@@ -456,6 +692,20 @@ export default function AgentPanel() {
                       </div>
 
                       {m.confidence && <ConfidenceBadge level={m.confidence} />}
+
+                      {m.sources && m.sources.length > 0 && <SourceList sources={m.sources} />}
+
+                      {m.runId && !streaming && (
+                        <TraceView
+                          runId={m.runId}
+                          onRerun={() => {
+                            // Replay: re-ask the same question. An LLM will not
+                            // reproduce identical prose, but a failure pattern will.
+                            const asked = messages[i - 1];
+                            if (asked?.role === 'user') send(asked.content);
+                          }}
+                        />
+                      )}
 
                       {m.tools && m.tools.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-1.5 border-t border-black/5 pt-2.5">

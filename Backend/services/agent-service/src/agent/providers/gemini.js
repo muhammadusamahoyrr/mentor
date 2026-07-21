@@ -126,7 +126,11 @@ class GeminiClient {
     } catch (err) {
       throw cleanGeminiError(err);
     }
-    return toAnthropicMessage({ text: resp.text, functionCalls: functionCallsWithSignatures(resp) });
+    return toAnthropicMessage({
+      text: resp.text,
+      functionCalls: functionCallsWithSignatures(resp),
+      usage: resp.usageMetadata,
+    });
   }
 
   _stream(params) {
@@ -140,6 +144,7 @@ class GeminiClient {
       finalMessage: async () => {
         const ai = await self._ai();
         let text = '';
+        let usage;
         const functionCalls = [];
         try {
           const stream = await ai.models.generateContentStream(self._request(params));
@@ -148,12 +153,15 @@ class GeminiClient {
               text += chunk.text;
               textCb(chunk.text);
             }
+            // Gemini reports usage only on the final chunk(s) — keep the last
+            // one we see rather than assuming it arrives anywhere in particular.
+            if (chunk.usageMetadata) usage = chunk.usageMetadata;
             for (const fc of functionCallsWithSignatures(chunk)) functionCalls.push(fc);
           }
         } catch (err) {
           throw cleanGeminiError(err);
         }
-        return toAnthropicMessage({ text, functionCalls });
+        return toAnthropicMessage({ text, functionCalls, usage });
       },
     };
     return api;

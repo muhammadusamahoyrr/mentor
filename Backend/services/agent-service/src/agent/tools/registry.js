@@ -1,35 +1,14 @@
-// The skill (tool) registry. Each skill module exports { definition, handler }.
-// Phase 1 ships web_search and the local read_file. Phase 2 adds the platform
-// skills that call sibling services with the caller's JWT (read_patient_file and
-// list_patient_files → file-service, get_appointment → appointment-service).
-// Phase 4 adds retrieve_docs (ChromaDB vector recall). They all register here.
-const webSearch = require('./webSearch');
+// agent-service's in-process skill set = the shared PLATFORM skills (the same
+// ones healthcare-mcp exposes over MCP) PLUS the local-disk `read_file` reader.
+//
+// read_file is composed in here rather than in the shared registry on purpose:
+// it reads this host's own docs folder, so it must never be reachable over the
+// network. It stays available to the CLI harness (scripts/ask.js) and to the
+// in-process gateway used offline and in tests.
+//
+// This registry is the FALLBACK tool backend. When HEALTHCARE_MCP_URL is set the
+// gateway routes tool calls to the MCP server instead — see ./gateway.js.
+const platform = require('../../../../../shared/agent/tools/registry');
 const readFile = require('./readFile');
-const getAppointment = require('./getAppointment');
-const listPatientFiles = require('./listPatientFiles');
-const readPatientFile = require('./readPatientFile');
-const retrieveDocs = require('./retrieveDocs');
 
-const skills = [
-  webSearch,
-  readFile,
-  getAppointment,
-  listPatientFiles,
-  readPatientFile,
-  retrieveDocs,
-];
-
-// Fail fast on a duplicate tool name — the Claude API rejects a tools array with
-// two identical names, and it is an easy mistake when adding a skill.
-const names = skills.map((s) => s.definition.name);
-const dupes = names.filter((n, i) => names.indexOf(n) !== i);
-if (dupes.length) {
-  throw new Error(`Duplicate skill name(s): ${[...new Set(dupes)].join(', ')}`);
-}
-
-module.exports = {
-  // Anthropic-format tool definitions passed to messages.create({ tools }).
-  definitions: skills.map((s) => s.definition),
-  // name -> handler(input, ctx)
-  handlers: Object.fromEntries(skills.map((s) => [s.definition.name, s.handler])),
-};
+module.exports = platform.build([...platform.skills, readFile]);

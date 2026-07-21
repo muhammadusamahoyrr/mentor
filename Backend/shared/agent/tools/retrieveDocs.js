@@ -4,8 +4,8 @@
 //   2. doctorId    — only chunks from documents shared with THIS doctor were
 //      ingested tagged with their id, so a doctor can never retrieve a document
 //      they could not have opened directly. Same authorization as read_patient_file.
-const embed = require('../../vector/embed');
-const chroma = require('../../vector/chroma');
+const embed = require('../vector/embed');
+const chroma = require('../vector/chroma');
 
 const COLLECTION = 'clinical_docs';
 

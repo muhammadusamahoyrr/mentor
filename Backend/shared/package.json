@@ -1,7 +1,7 @@
 {
   "name": "shared",
   "version": "1.0.0",
-  "description": "Kafka and Redis clients shared by the services.",
+  "description": "Kafka/Redis clients and the shared agent skill handlers used by agent-service and healthcare-mcp.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -11,7 +11,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "chromadb": "^1.9.4",
     "kafkajs": "^2.2.4",
-    "redis": "^6.0.0"
+    "redis": "^6.0.0",
+    "unpdf": "^1.6.2"
   }
 }

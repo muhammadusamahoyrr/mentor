@@ -2,7 +2,7 @@
 // id and extracts its text. Binary-safe: reads the bytes as an ArrayBuffer (never
 // response.text(), which would corrupt a PDF by decoding it as UTF-8).
 const { requireToken, authHeaders } = require('./serviceClient');
-const injectionGuard = require('../../security/injectionGuard');
+const injectionGuard = require('../security/injectionGuard');
 
 const BASE = process.env.FILE_SERVICE_URL || 'http://localhost:3005';
 const MAX_CHARS = 20000;
@@ -42,7 +42,7 @@ async function handler({ fileId }, ctx) {
 
   let text;
   if (contentType.includes('pdf')) {
-    const { extractPdfText } = require('../../utils/pdfText');
+    const { extractPdfText } = require('../utils/pdfText');
     text = await extractPdfText(buf);
   } else if (contentType.includes('text/') || contentType.includes('json')) {
     text = buf.toString('utf8');

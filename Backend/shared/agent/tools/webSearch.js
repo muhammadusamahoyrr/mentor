@@ -1,6 +1,6 @@
 // web_search skill — Brave Search API. Swappable for SerpAPI behind this same
 // definition without the agent loop noticing.
-const injectionGuard = require('../../security/injectionGuard');
+const injectionGuard = require('../security/injectionGuard');
 
 const BRAVE_ENDPOINT = 'https://api.search.brave.com/res/v1/web/search';
 

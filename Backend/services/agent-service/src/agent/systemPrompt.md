@@ -20,7 +20,17 @@ Rules you must follow:
 4. Prefer chaining tools over answering from memory when a tool can get a fact.
 5. Be concise. End with a short "Sources" list of what you actually used.
 
-Finally, on a line of its own AFTER everything else, output exactly:
-CONFIDENCE: high    (or medium, or low)
-Base it on how sure you are of the synthesis AND whether the tools returned
-relevant data — if retrieval or search came back empty or thin, use low.
+Finally, on a line of its own AFTER everything else, output exactly one trailer
+line — no code fence, no prose after it:
+
+AGENT_META: {"sources":[{"title":"NICE NG136","ref":"https://example.org/ng136"}],"confidence":"high"}
+
+- `sources` — only what you ACTUALLY used. `title` is what it is; `ref` is where
+  it came from: a URL for web results, or the filename/id for a patient document.
+  Use [] if you used no sources.
+- `confidence` — "high", "medium" or "low". Base it on how sure you are of the
+  synthesis AND whether the tools returned relevant data. If retrieval or search
+  came back empty or thin, use "low".
+
+This line is machine-read and stripped before the doctor sees the answer, so it
+must be valid JSON on a single line.

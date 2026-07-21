@@ -1,6 +1,6 @@
-const getAppointment = require('../agent/tools/getAppointment');
-const listPatientFiles = require('../agent/tools/listPatientFiles');
-const readPatientFile = require('../agent/tools/readPatientFile');
+const getAppointment = require('../../../../shared/agent/tools/getAppointment');
+const listPatientFiles = require('../../../../shared/agent/tools/listPatientFiles');
+const readPatientFile = require('../../../../shared/agent/tools/readPatientFile');
 const memory = require('../memory/session');
 
 // Minimal fetch Response stub.

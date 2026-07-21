@@ -12,4 +12,8 @@ router.post('/ask', authenticate, authorizeRole('doctor'), agentController.ask);
 // Inspect what the agent remembers for a session (the "recall" deliverable).
 router.get('/sessions/:id', authenticate, authorizeRole('doctor'), agentController.getSession);
 
+// The trace for one run: planner steps from here plus the tool steps executed
+// inside healthcare-mcp, stitched by runId. Scoped to the doctor who asked.
+router.get('/traces/:runId', authenticate, authorizeRole('doctor'), agentController.getTrace);
+
 module.exports = router;

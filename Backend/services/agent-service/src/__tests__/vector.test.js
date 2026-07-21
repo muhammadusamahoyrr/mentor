@@ -1,6 +1,6 @@
-const { chunk } = require('../vector/chunk');
-const embed = require('../vector/embed');
-const chroma = require('../vector/chroma');
+const { chunk } = require('../../../../shared/agent/vector/chunk');
+const embed = require('../../../../shared/agent/vector/embed');
+const chroma = require('../../../../shared/agent/vector/chroma');
 const { makeFakeChroma } = require('./fakeChroma');
 
 describe('chunk', () => {

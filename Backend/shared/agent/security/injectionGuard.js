@@ -10,6 +10,9 @@
 //      markers so the model treats it as text to analyse, not instructions.
 // Every detection is surfaced as `injectionFlagged` on the tool result and can be
 // logged via the hook, so an attempt is visible in the audit trail.
+//
+// Shared: both agent-service (local read_file) and healthcare-mcp (every tool
+// that returns untrusted text) guard through this one copy.
 
 const PATTERNS = [
   /ignore\s+(all\s+|any\s+)?(previous|prior|earlier|above)\s+instructions/i,

@@ -1,9 +1,13 @@
 // read_file skill (Phase 1) — reads a local .txt/.pdf from the agent docs folder.
-// Phase 2 adds a file-service-backed variant that streams real patient documents
-// with the caller's JWT; this local reader stays for the CLI harness and tests.
+// read_patient_file is the file-service-backed variant that streams real patient
+// documents with the caller's JWT; this local reader stays for the CLI harness
+// and tests.
+//
+// Deliberately NOT exposed over MCP: it reads this host's own filesystem, so it
+// is composed into agent-service's registry only (see ./registry.js).
 const fs = require('fs/promises');
 const path = require('path');
-const injectionGuard = require('../../security/injectionGuard');
+const injectionGuard = require('../../../../../shared/agent/security/injectionGuard');
 
 const DOCS_DIR = path.resolve(
   process.env.AGENT_DOCS_DIR || path.join(__dirname, '..', '..', '..', 'docs')
@@ -41,7 +45,7 @@ async function handler({ filename }) {
 
   let text;
   if (ext === '.pdf') {
-    const { extractPdfText } = require('../../utils/pdfText');
+    const { extractPdfText } = require('../../../../../shared/agent/utils/pdfText');
     text = await extractPdfText(buf);
   } else {
     text = buf.toString('utf8');

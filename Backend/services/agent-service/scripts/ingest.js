@@ -11,11 +11,11 @@
 // so the store never contains a chunk a doctor could retrieve but not open.
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
-const listPatientFiles = require('../src/agent/tools/listPatientFiles');
-const readPatientFile = require('../src/agent/tools/readPatientFile');
-const { chunk } = require('../src/vector/chunk');
-const embed = require('../src/vector/embed');
-const chroma = require('../src/vector/chroma');
+const listPatientFiles = require('../../../shared/agent/tools/listPatientFiles');
+const readPatientFile = require('../../../shared/agent/tools/readPatientFile');
+const { chunk } = require('../../../shared/agent/vector/chunk');
+const embed = require('../../../shared/agent/vector/embed');
+const chroma = require('../../../shared/agent/vector/chroma');
 
 (async () => {
   const arg = process.argv.find((a) => a.startsWith('--token='));

@@ -49,6 +49,7 @@ flowchart TB
         File["file · 3005"]
         Notes["notes · 3006"]
         Agent["agent · 3007"]
+        Mcp["healthcare-mcp · 3008"]
         Audit["audit"]
     end
 
@@ -105,6 +106,7 @@ flowchart TB
 | **file** | 3005 | MongoDB | Patient file vault (uploads, sharing, doctor comments) |
 | **notes** | 3006 | SQLite (Prisma) | Clinical notes + vitals; AI-draft "unreviewed → confirm" workflow |
 | **agent** | 3007 | Redis + ChromaDB | Clinical research agent (ReAct loop, tools, streaming, RAG) |
+| **healthcare-mcp** | 3008 | — | MCP server exposing the clinical skills as MCP tools (+ demo resources/prompts) |
 | **audit** | — | MongoDB | Kafka consumer; persists an audit trail (no HTTP port) |
 
 The **agent-service** is the AI centerpiece: a function-calling ReAct loop over Claude or

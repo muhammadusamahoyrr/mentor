@@ -4,6 +4,10 @@
 // skill can never reach data the doctor could not reach directly. The sibling
 // service performs its normal participant/ownership check on that token; the
 // agent inherits exactly the caller's access, nothing more.
+//
+// Under MCP the caller's JWT arrives on the transport's Authorization header and
+// is put into `ctx` by the server's auth middleware — it is NEVER a tool
+// argument, because tool arguments land in the model's context and the trace log.
 
 function requireToken(ctx) {
   if (!ctx || !ctx.token) {

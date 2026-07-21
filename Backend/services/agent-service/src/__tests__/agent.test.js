@@ -1,6 +1,6 @@
 const registry = require('../agent/tools/registry');
 const readFile = require('../agent/tools/readFile');
-const webSearch = require('../agent/tools/webSearch');
+const webSearch = require('../../../../shared/agent/tools/webSearch');
 const { createToolLogger } = require('../hooks/toolLogger');
 const { runAgent } = require('../agent/loop');
 
