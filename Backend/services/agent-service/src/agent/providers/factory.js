@@ -42,9 +42,13 @@ function resolveProvider() {
 function defaultModel(provider = resolveProvider()) {
   if (provider === 'gemini') return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   if (provider === 'openrouter') {
-    // A free model by default, so adding only OPENROUTER_API_KEY is enough to get
-    // a working fallback with no further configuration.
-    return process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
+    // `openrouter/free` is OpenRouter's auto-router across whatever free models
+    // are currently available, and it supports tool calling — which the ReAct
+    // loop requires. Deliberately NOT a pinned slug: the first default here was
+    // `meta-llama/llama-3.3-70b-instruct:free`, which stopped being free and
+    // started 404-ing. A fallback provider that silently rots is worse than none,
+    // so the default is the one identifier that cannot go stale.
+    return process.env.OPENROUTER_MODEL || 'openrouter/free';
   }
   return process.env.AGENT_MODEL || 'claude-sonnet-5';
 }

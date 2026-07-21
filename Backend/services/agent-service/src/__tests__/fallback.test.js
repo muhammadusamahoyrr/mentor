@@ -215,8 +215,10 @@ describe('resolveProviderChain', () => {
     expect(resolveProviderChain()).toEqual(['anthropic']);
   });
 
-  it('gives OpenRouter a free model by default', () => {
-    expect(defaultModel('openrouter')).toMatch(/:free$/);
+  it('defaults OpenRouter to the auto-router, not a pinned free slug', () => {
+    // A pinned ":free" model can stop being free and start 404-ing — the first
+    // default here did exactly that. `openrouter/free` cannot go stale.
+    expect(defaultModel('openrouter')).toBe('openrouter/free');
   });
 });
 
