@@ -17,9 +17,21 @@ const { z } = require('zod');
 
 // A citation the doctor can actually follow up: what it was, and where it came
 // from (a URL for web results, a filename/id for a patient document).
+//
+// The `ref` refinement rejects ABBREVIATED urls. Models like to shorten a long
+// link to `https://reference.medscape.com/cc2/p10/...`, which renders as a
+// clickable link that goes nowhere — worse than citing nothing, because it looks
+// verifiable. Failing validation here makes the repair retry ask for it again.
 const SourceSchema = z.object({
   title: z.string().trim().min(1).max(200),
-  ref: z.string().trim().min(1).max(500),
+  ref: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .refine((v) => !/(\.\.\.|…)/.test(v), {
+      message: 'ref looks truncated (contains "..." or "…") — give the complete URL or id',
+    }),
 });
 
 const AgentMetaSchema = z.object({

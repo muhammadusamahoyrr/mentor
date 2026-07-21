@@ -106,6 +106,42 @@ describe('parseAnswer', () => {
     });
   });
 
+  // Regression: seen in the browser on 2026-07-21. The model cited
+  // "https://reference.medscape.com/cc2/p10/..." — an ABBREVIATED url that
+  // renders as a clickable link going nowhere. A dead reference that looks
+  // verifiable is worse than no reference.
+  describe('truncated references', () => {
+    it('rejects a ref abbreviated with "..."', () => {
+      const { ok, error } = parseAnswer(
+        'Text.\nAGENT_META: {"sources":[{"title":"NICE","ref":"https://reference.medscape.com/cc2/p10/..."}],"confidence":"medium"}'
+      );
+      expect(ok).toBe(false);
+      expect(error).toMatch(/truncated/i);
+    });
+
+    it('rejects a ref abbreviated with a real ellipsis character', () => {
+      const { ok } = parseAnswer(
+        'Text.\nAGENT_META: {"sources":[{"title":"NICE","ref":"https://nice.org.uk/…"}],"confidence":"low"}'
+      );
+      expect(ok).toBe(false);
+    });
+
+    it('accepts a complete URL', () => {
+      const { ok, meta } = parseAnswer(
+        'Text.\nAGENT_META: {"sources":[{"title":"NICE NG136","ref":"https://www.nice.org.uk/guidance/ng136"}],"confidence":"high"}'
+      );
+      expect(ok).toBe(true);
+      expect(meta.sources[0].ref).toBe('https://www.nice.org.uk/guidance/ng136');
+    });
+
+    it('still accepts a document id, which is not a URL at all', () => {
+      const { ok } = parseAnswer(
+        'Text.\nAGENT_META: {"sources":[{"title":"labs.pdf","ref":"file-abc123"}],"confidence":"high"}'
+      );
+      expect(ok).toBe(true);
+    });
+  });
+
   it('strips the trailer even when the model pads it with whitespace', () => {
     const { ok, answer } = parseAnswer(
       'Body text.\n\n  AGENT_META: {"sources":[],"confidence":"medium"}   \n'

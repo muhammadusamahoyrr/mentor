@@ -6,6 +6,27 @@ const {
   LOW_PREFIX,
 } = require('../agent/confidence');
 
+// Regression: seen in the browser on 2026-07-21. The model wrote
+// "Confidence: Medium (guidelines differ on thresholds…)" as prose. The old
+// pattern only allowed trailing dots/spaces after the level, so it did not
+// match — the sentence stayed in the answer and sat directly above the
+// confidence badge saying the same thing.
+describe('a prose confidence line with a trailing explanation', () => {
+  it('strips the whole line, not just a bare marker', () => {
+    const { level, answer } = parseConfidence(
+      'Guidelines differ between bodies.\n\nConfidence: Medium (guidelines differ on thresholds and risk-based triggers)'
+    );
+    expect(level).toBe('medium');
+    expect(answer).toBe('Guidelines differ between bodies.');
+    expect(answer).not.toMatch(/Confidence/i);
+  });
+
+  it('leaves prose that merely mentions confidence alone', () => {
+    const text = 'Confidence intervals were wide in that trial.';
+    expect(parseConfidence(text)).toEqual({ level: null, answer: text });
+  });
+});
+
 describe('parseConfidence', () => {
   it('extracts and strips a trailing CONFIDENCE line', () => {
     const { level, answer } = parseConfidence('The BP target is <140/90.\nCONFIDENCE: high');

@@ -68,9 +68,12 @@ async function finalizeAnswer(result, hook, opts = {}) {
   let clean;
 
   if (parsed.ok) {
-    clean = parsed.answer;
     modelLevel = parsed.meta.confidence;
     sources = parsed.meta.sources;
+    // Even with a valid trailer, models often ALSO write a prose
+    // "Confidence: Medium (…)" line — which then appears above the badge saying
+    // the same thing. Strip it here too; the level from the trailer still wins.
+    clean = parseConfidence(parsed.answer).answer;
   } else {
     // Legacy fallback: a bare CONFIDENCE line, or nothing at all.
     const legacy = parseConfidence(parsed.answer);

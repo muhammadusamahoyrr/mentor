@@ -11,11 +11,20 @@
 const LEVELS = ['low', 'medium', 'high'];
 const rank = (l) => LEVELS.indexOf(l);
 
-// Pull a trailing "CONFIDENCE: <level>" line off the answer and remove it from
+// Pull a trailing "Confidence: <level>" line off the answer and remove it from
 // the visible text.
+//
+// The tail is deliberately permissive. Models do not stop at the bare level —
+// they write "Confidence: Medium (guidelines differ on thresholds…)", and an
+// earlier pattern that only allowed trailing dots/spaces left that whole
+// sentence sitting under the answer, duplicating the confidence badge on screen.
+// So: allow any trailing remainder on that final line, as long as the line
+// starts with the marker and a recognised level.
+const CONFIDENCE_LINE = /\n?[ \t]*CONFIDENCE[ \t]*:[ \t]*(high|medium|low)\b[^\n]*$/i;
+
 function parseConfidence(answer) {
   const text = String(answer || '');
-  const m = text.match(/\n?\s*CONFIDENCE:\s*(high|medium|low)\b[.\s]*$/i);
+  const m = text.match(CONFIDENCE_LINE);
   if (!m) return { level: null, answer: text.trim() };
   return { level: m[1].toLowerCase(), answer: text.slice(0, m.index).trim() };
 }
