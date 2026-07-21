@@ -27,7 +27,9 @@ AGENT_META: {"sources":[{"title":"NICE NG136","ref":"https://example.org/ng136"}
 
 - `sources` — only what you ACTUALLY used. `title` is what it is; `ref` is where
   it came from: a URL for web results, or the filename/id for a patient document.
-  Use [] if you used no sources.
+  Use [] if you used no sources. Keep each `title` SHORT (a few words — the
+  publication or document name, not the full headline) and list at most 6: the
+  trailer is written last, so a long one risks being cut off mid-line.
 - `confidence` — "high", "medium" or "low". Base it on how sure you are of the
   synthesis AND whether the tools returned relevant data. If retrieval or search
   came back empty or thin, use "low".

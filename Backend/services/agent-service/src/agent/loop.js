@@ -15,7 +15,11 @@ const { emptyUsage, addUsage, summarize } = require('./providers/usage');
 // first live run spent all six steps on progressively refined web searches and
 // returned "reached the maximum number of reasoning steps" instead of an answer.
 const MAX_STEPS = Number(process.env.AGENT_MAX_STEPS || 10);
-const MAX_TOKENS = 2048;
+// 4096, not 2048: a multi-source research answer plus its AGENT_META trailer
+// overran 2048 in real use, and the cut landed mid-trailer — costing the sources
+// and the confidence level. The trailer is the LAST thing generated, so it is
+// always the first casualty of a tight budget.
+const MAX_TOKENS = Number(process.env.AGENT_MAX_TOKENS || 4096);
 
 const textOf = (content) =>
   content

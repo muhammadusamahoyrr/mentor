@@ -35,13 +35,28 @@ const TRAILER_RE = /\n?\s*AGENT_META:\s*(\{[\s\S]*\})\s*$/;
 
 /**
  * Split a raw model answer into visible prose and its raw trailer JSON.
- * @returns {{ answer: string, raw: string|null }}
+ *
+ * ⚠️ The marker must be stripped even when the JSON is unusable. A long answer
+ * can exhaust max_tokens PART-WAY THROUGH the trailer, leaving something like
+ * `AGENT_META: {"sources":[{"title":"Reuters","ref":"` with no closing brace.
+ * The strict pattern cannot match that, and an earlier version then treated the
+ * whole thing as prose — so the doctor saw raw JSON pasted onto their answer.
+ * Parsing and hiding are separate jobs: we may fail to parse it, but we must
+ * always hide it.
+ *
+ * @returns {{ answer: string, raw: string|null, truncated: boolean }}
  */
 function splitTrailer(text) {
   const s = String(text || '');
+
   const m = s.match(TRAILER_RE);
-  if (!m) return { answer: s.trim(), raw: null };
-  return { answer: s.slice(0, m.index).trim(), raw: m[1] };
+  if (m) return { answer: s.slice(0, m.index).trim(), raw: m[1], truncated: false };
+
+  // No well-formed trailer. If the marker is there at all, cut from it anyway.
+  const i = s.lastIndexOf(TRAILER_PREFIX);
+  if (i !== -1) return { answer: s.slice(0, i).trim(), raw: null, truncated: true };
+
+  return { answer: s.trim(), raw: null, truncated: false };
 }
 
 /**
@@ -52,9 +67,15 @@ function splitTrailer(text) {
  *   the caller may attempt one repair.
  */
 function parseAnswer(text) {
-  const { answer, raw } = splitTrailer(text);
+  const { answer, raw, truncated } = splitTrailer(text);
   if (raw === null) {
-    return { answer, meta: null, ok: false, error: 'no trailer' };
+    // `answer` already has the marker stripped when it was there but unusable.
+    return {
+      answer,
+      meta: null,
+      ok: false,
+      error: truncated ? 'trailer truncated or malformed' : 'no trailer',
+    };
   }
 
   let candidate;

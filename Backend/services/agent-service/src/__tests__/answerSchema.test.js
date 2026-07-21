@@ -68,6 +68,44 @@ describe('parseAnswer', () => {
     expect(error).toMatch(/ref/);
   });
 
+  // Regression: seen in the browser on 2026-07-21. A long multi-source answer
+  // exhausted max_tokens PART-WAY THROUGH the trailer, so it had no closing
+  // brace. The strict pattern could not match, the whole thing was treated as
+  // prose, and raw JSON was pasted onto the doctor's answer.
+  // Parsing and hiding are separate jobs: we may fail to parse it, but the
+  // marker must never survive into the visible answer.
+  describe('a trailer cut off by the token limit', () => {
+    const TRUNCATED =
+      'Here is a summary of the latest global health news.\n\n' +
+      'AGENT_META: {"sources":[{"title":"Reuters","ref":"https://reuters.com/x"},{"title":"CBC","ref":"';
+
+    it('still strips the marker from the visible answer', () => {
+      const { answer } = parseAnswer(TRUNCATED);
+      expect(answer).toBe('Here is a summary of the latest global health news.');
+      expect(answer).not.toMatch(/AGENT_META/);
+      expect(answer).not.toMatch(/"sources"/);
+    });
+
+    it('reports it as truncated so the repair retry fires', () => {
+      const { ok, meta, error } = parseAnswer(TRUNCATED);
+      expect(ok).toBe(false);
+      expect(meta).toBeNull();
+      expect(error).toMatch(/truncated or malformed/);
+    });
+
+    it('also strips a marker followed by nothing at all', () => {
+      const { answer, ok } = parseAnswer('The answer.\nAGENT_META:');
+      expect(answer).toBe('The answer.');
+      expect(ok).toBe(false);
+    });
+
+    it('does not confuse plain prose that never had a trailer', () => {
+      const { answer, error } = parseAnswer('Just prose, no marker.');
+      expect(answer).toBe('Just prose, no marker.');
+      expect(error).toBe('no trailer');
+    });
+  });
+
   it('strips the trailer even when the model pads it with whitespace', () => {
     const { ok, answer } = parseAnswer(
       'Body text.\n\n  AGENT_META: {"sources":[],"confidence":"medium"}   \n'
