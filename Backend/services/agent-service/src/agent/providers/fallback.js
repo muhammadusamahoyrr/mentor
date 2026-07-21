@@ -34,8 +34,18 @@ const describe = (err) => `${err?.status ? `${err.status} ` : ''}${err?.message 
 function createFallbackClient(links, onFallback = () => {}) {
   if (!links.length) throw new Error('A provider chain needs at least one provider');
 
-  // Each attempt runs with that link's own model.
-  const paramsFor = (link, params) => ({ ...params, model: link.model });
+  // Each attempt runs with that link's own model AND its own token ceiling.
+  //
+  // The ceiling matters as much as the model: a free OpenRouter account rejects
+  // an affordable-looking request with 402 ("you requested up to 4096 tokens but
+  // can only afford 3478") for a budget Gemini accepts without comment. A chain
+  // that swapped the model but kept the caller's max_tokens would fail over to a
+  // provider and then immediately fail ON that provider.
+  const paramsFor = (link, params) => ({
+    ...params,
+    model: link.model,
+    ...(link.maxTokens ? { max_tokens: Math.min(params.max_tokens ?? link.maxTokens, link.maxTokens) } : {}),
+  });
 
   async function attempt(run, { streaming = false } = {}) {
     const failures = [];

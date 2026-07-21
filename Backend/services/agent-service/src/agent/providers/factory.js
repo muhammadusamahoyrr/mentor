@@ -42,15 +42,39 @@ function resolveProvider() {
 function defaultModel(provider = resolveProvider()) {
   if (provider === 'gemini') return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   if (provider === 'openrouter') {
-    // `openrouter/free` is OpenRouter's auto-router across whatever free models
-    // are currently available, and it supports tool calling — which the ReAct
-    // loop requires. Deliberately NOT a pinned slug: the first default here was
-    // `meta-llama/llama-3.3-70b-instruct:free`, which stopped being free and
-    // started 404-ing. A fallback provider that silently rots is worse than none,
-    // so the default is the one identifier that cannot go stale.
-    return process.env.OPENROUTER_MODEL || 'openrouter/free';
+    // Chosen by testing, twice over:
+    //   1. `meta-llama/llama-3.3-70b-instruct:free` stopped being free and 404'd.
+    //   2. `openrouter/free` (the auto-router) never goes stale, but it is a
+    //      lottery — it routed to a REASONING model that emits its scratchpad as
+    //      content, so the doctor got "We need to produce answer with citations
+    //      inline..." instead of an answer.
+    //
+    // So: a pinned model, verified to support tool calling (the ReAct loop needs
+    // it) and not to narrate its reasoning. A pinned slug can go stale, but that
+    // fails LOUDLY with a 404 — whereas the auto-router fails silently, putting
+    // garbage in front of a clinician. Loud beats silent here.
+    //
+    // If this ever 404s, list current options with:
+    //   GET https://openrouter.ai/api/v1/models  -> pricing.prompt === "0"
+    //                                            && supported_parameters ∋ tools
+    return process.env.OPENROUTER_MODEL || 'openai/gpt-oss-20b:free';
   }
   return process.env.AGENT_MODEL || 'claude-sonnet-5';
+}
+
+/**
+ * The most tokens this provider may be asked for.
+ *
+ * A free OpenRouter account refuses a request whose max_tokens exceeds what its
+ * remaining credit can cover — 402, not 429, so the chain (correctly) will not
+ * retry it. Keeping OpenRouter's ceiling conservative means the fallback still
+ * answers instead of failing at the moment it is needed. A tighter budget can
+ * truncate the answer's trailer, but that now degrades gracefully: the marker is
+ * still stripped and the repair retry recovers the sources.
+ */
+function maxTokensFor(provider) {
+  if (provider === 'openrouter') return Number(process.env.OPENROUTER_MAX_TOKENS || 2048);
+  return Number(process.env.AGENT_MAX_TOKENS || 4096);
 }
 
 /**
@@ -103,15 +127,19 @@ function createProviderClient(provider = resolveProvider()) {
  * several it is a fallback chain over them, presenting the same interface.
  */
 function createClient(provider) {
-  if (provider) return createProviderClient(provider); // explicit: no chain
+  if (provider) return createProviderClient(provider); // explicit: raw, no wrapper
 
+  // Always go through the chain wrapper, even for a single provider: it is what
+  // applies that provider's model AND its token ceiling. Returning the raw client
+  // for a chain of one meant a lone OpenRouter still got asked for 4096 tokens
+  // and 402'd.
   const chain = resolveProviderChain();
-  if (chain.length === 1) return createProviderClient(chain[0]);
 
   return createFallbackClient(
     chain.map((p) => ({
       provider: p,
       model: defaultModel(p),
+      maxTokens: maxTokensFor(p),
       client: createProviderClient(p),
     }))
   );
@@ -121,6 +149,7 @@ module.exports = {
   resolveProvider,
   resolveProviderChain,
   defaultModel,
+  maxTokensFor,
   createClient,
   createProviderClient,
   hasKey,

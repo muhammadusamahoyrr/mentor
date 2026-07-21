@@ -81,6 +81,22 @@ async function finalizeAnswer(result, hook, opts = {}) {
     modelLevel = legacy.level;
   }
 
+  // ⚠️ NEVER PRESENT AN EMPTY ANSWER AS CONFIDENT. A model can return a
+  // well-formed trailer with no prose at all — the weaker free-tier models do it
+  // — which produced a blank reply badged "high confidence". Whatever the cause,
+  // an empty answer is not a confident one: say so plainly and force it to low.
+  if (isEmptyAnswer(clean)) {
+    return {
+      answer:
+        'The model did not return an answer for this question. Please try again — if it keeps happening the provider may be rate-limited or degraded.',
+      confidence: 'low',
+      sources: [],
+      trailerRepaired: repaired,
+      trailerValid: parsed.ok,
+      empty: true,
+    };
+  }
+
   const confidence = resolveConfidence(modelLevel, result.toolOutcomes);
   let answer = clean;
   if (confidence === 'low') {
@@ -97,6 +113,12 @@ async function finalizeAnswer(result, hook, opts = {}) {
 // opt-in because it costs several times more model calls per question and,
 // as week5.md says plainly, does not automatically produce a better answer.
 const orchestrating = () => (process.env.AGENT_MODE || 'single').toLowerCase() === 'supervisor';
+
+// Deliberately "empty means EMPTY" rather than a minimum length. A terse reply
+// is still a reply — "Yes, with caveats." or "The sources I checked do not cover
+// this." are legitimate answers, and a length threshold would silently discard
+// them. Only nothing at all counts as nothing.
+const isEmptyAnswer = (s) => !s || s.trim().length === 0;
 
 // POST /api/agent/ask — run the ReAct loop to a final answer.
 // Content-negotiated: `Accept: text/event-stream` streams tokens and live tool

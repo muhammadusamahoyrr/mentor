@@ -89,6 +89,38 @@ describe('the validated answer trailer', () => {
     expect(r.body.answer).not.toMatch(/AGENT_META/);
   });
 
+  // Regression: a weak fallback model returned a well-formed trailer and NO
+  // prose, so the doctor got a blank reply badged "high confidence". An empty
+  // answer is never a confident one.
+  it('refuses to badge an empty answer as confident', async () => {
+    mockScript = ['AGENT_META: {"sources":[],"confidence":"high"}'];
+
+    const r = await request(app)
+      .post('/api/agent/ask')
+      .set('Authorization', doctor())
+      .send({ question: 'anything' })
+      .expect(200);
+
+    expect(r.body.confidence).toBe('low'); // NOT the "high" the model claimed
+    expect(r.body.answer).toMatch(/did not return an answer/i);
+    expect(r.body.sources).toEqual([]);
+  });
+
+  it('still allows a terse but genuine answer through', async () => {
+    mockScript = [
+      'The sources I checked do not cover this question.\nAGENT_META: {"sources":[],"confidence":"low"}',
+    ];
+
+    const r = await request(app)
+      .post('/api/agent/ask')
+      .set('Authorization', doctor())
+      .send({ question: 'anything' })
+      .expect(200);
+
+    expect(r.body.answer).toMatch(/do not cover this question/);
+    expect(r.body.answer).not.toMatch(/did not return an answer/i);
+  });
+
   it('skips the repair call entirely when AGENT_TRAILER_REPAIR=0', async () => {
     // The escape hatch for a rate-limited free tier: one fewer model call per
     // malformed answer, at the cost of the citations.

@@ -100,6 +100,48 @@ describe('fallback chain — non-streaming', () => {
     ]);
   });
 
+  it('sends each provider ITS OWN token ceiling, not the caller\'s', async () => {
+    // A free OpenRouter account 402s on a budget Gemini accepts silently
+    // ("you requested up to 4096 tokens but can only afford 3478"), and 402 is
+    // not retryable — so a chain that swapped the model but kept max_tokens
+    // would fail over and then immediately fail again.
+    const seen = [];
+    const record = (name, fail) => async ({ params }) => {
+      seen.push({ provider: name, max_tokens: params.max_tokens });
+      if (fail) throw httpError(429);
+      return { content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' };
+    };
+
+    const client = createFallbackClient([
+      { provider: 'gemini', model: 'g', maxTokens: 4096, client: fakeClient(record('gemini', true)) },
+      { provider: 'openrouter', model: 'o', maxTokens: 2048, client: fakeClient(record('openrouter', false)) },
+    ]);
+
+    await client.messages.create({ messages: [], model: 'g', max_tokens: 4096 });
+    expect(seen).toEqual([
+      { provider: 'gemini', max_tokens: 4096 },
+      { provider: 'openrouter', max_tokens: 2048 }, // clamped down
+    ]);
+  });
+
+  it('never raises a caller\'s deliberately small budget up to the ceiling', async () => {
+    const seen = [];
+    const client = createFallbackClient([
+      {
+        provider: 'openrouter',
+        model: 'o',
+        maxTokens: 2048,
+        client: fakeClient(async ({ params }) => {
+          seen.push(params.max_tokens);
+          return { content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' };
+        }),
+      },
+    ]);
+
+    await client.messages.create({ messages: [], max_tokens: 256 });
+    expect(seen).toEqual([256]); // min(), not overwrite
+  });
+
   it('does not waste a second call on a 400 — it fails immediately', async () => {
     const second = jest.fn(ok('never'));
     const client = createFallbackClient([
@@ -215,10 +257,11 @@ describe('resolveProviderChain', () => {
     expect(resolveProviderChain()).toEqual(['anthropic']);
   });
 
-  it('defaults OpenRouter to the auto-router, not a pinned free slug', () => {
-    // A pinned ":free" model can stop being free and start 404-ing — the first
-    // default here did exactly that. `openrouter/free` cannot go stale.
-    expect(defaultModel('openrouter')).toBe('openrouter/free');
+  it('defaults OpenRouter to a pinned model verified for tools and clean output', () => {
+    // NOT `openrouter/free`: the auto-router picked a reasoning model that
+    // emitted its scratchpad as the answer. A pinned slug can go stale, but a
+    // 404 is loud; garbage in front of a clinician is silent.
+    expect(defaultModel('openrouter')).toBe('openai/gpt-oss-20b:free');
   });
 });
 
