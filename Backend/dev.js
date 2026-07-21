@@ -19,6 +19,8 @@ const SERVICES = [
   { name: 'file',         dir: 'file-service',         port: 3005 },
   { name: 'notes',        dir: 'notes-service',        port: 3006 },
   { name: 'agent',        dir: 'agent-service',        port: 3007 },
+  // The agent's tools live here and are reached over MCP (Streamable HTTP).
+  { name: 'mcp',          dir: 'healthcare-mcp',       port: 3008 },
   // Kafka consumer, not an HTTP server -- it has no port to listen on.
   { name: 'audit',        dir: 'audit-service',        port: null },
 ];

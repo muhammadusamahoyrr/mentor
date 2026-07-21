@@ -70,7 +70,10 @@ function toGeminiContents(messages = []) {
 }
 
 // Gemini result (text + functionCalls) -> Anthropic-shaped message the loop reads.
-function toAnthropicMessage({ text, functionCalls = [] } = {}) {
+// `usage` is Gemini's usageMetadata, passed straight through so the token
+// accounting in providers/usage.js can read it — Gemini only reports it at the
+// end of a stream, so it can legitimately be absent.
+function toAnthropicMessage({ text, functionCalls = [], usage } = {}) {
   const content = [];
   if (text) content.push({ type: 'text', text });
 
@@ -88,7 +91,9 @@ function toAnthropicMessage({ text, functionCalls = [] } = {}) {
   }
 
   const hasCall = content.some((b) => b.type === 'tool_use');
-  return { content, stop_reason: hasCall ? 'tool_use' : 'end_turn' };
+  const message = { content, stop_reason: hasCall ? 'tool_use' : 'end_turn' };
+  if (usage) message.usage = usage;
+  return message;
 }
 
 module.exports = { toGeminiTools, toGeminiContents, toAnthropicMessage };

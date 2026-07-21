@@ -41,3 +41,7 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# scratch files written by live-run checks (contain short-lived JWTs)
+.ui-run.json
+.live-run.json
