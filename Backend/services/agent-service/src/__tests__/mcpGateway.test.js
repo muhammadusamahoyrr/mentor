@@ -23,8 +23,8 @@ const { runAgent } = require('../agent/loop');
 // .env of the CWD — this service's — and re-injects the real API keys that
 // jest.setup deliberately removed. Strip them again, or a test that expects a
 // skill to fail closed would instead call the live Brave/Voyage API.
-delete process.env.BRAVE_API_KEY;
-delete process.env.VOYAGE_API_KEY;
+process.env.BRAVE_API_KEY = '';
+process.env.VOYAGE_API_KEY = '';
 
 const DOCTOR = jwt.sign({ id: 'doc-42', role: 'doctor' }, process.env.JWT_SECRET);
 

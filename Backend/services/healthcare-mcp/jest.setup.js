@@ -6,10 +6,17 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 
 // Force the trace store onto its in-process fallback: no dependency on a running
 // Redis in CI, and no lingering socket handle after the suite finishes.
+process.env.REDIS_HOST = '127.0.0.1';
 process.env.REDIS_PORT = '65530';
 
-// Leave the skill API keys unset on purpose — the tests assert the no-key guards
-// fire rather than reaching the live Brave/Voyage APIs. Tests must never call the
-// network.
-delete process.env.BRAVE_API_KEY;
-delete process.env.VOYAGE_API_KEY;
+// Neutralise the skill API keys so the tests assert the no-key guards fire
+// instead of reaching the live Brave/Voyage APIs.
+//
+// ⚠️ EMPTY STRING, NOT `delete`. src/server.js calls dotenv.config(), which runs
+// AFTER this file and fills in any key that is ABSENT — so deleting these hands
+// them straight back from .env and the suite starts calling the real APIs (it
+// did: web_search began succeeding and the fail-closed tests broke). An empty
+// string is still "in" process.env, so dotenv leaves it alone, and every guard
+// in the code treats it as missing.
+process.env.BRAVE_API_KEY = '';
+process.env.VOYAGE_API_KEY = '';

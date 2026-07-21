@@ -58,6 +58,13 @@ async function ensure() {
         reconnectStrategy: false,
       },
       password: process.env.REDIS_PASSWORD || undefined,
+      // Speak RESP2. The v4+ client negotiates RESP3 with a HELLO command that
+      // only exists from Redis 6.0 — against an older server (the Windows 3.0.x
+      // port is still common) the connection fails with "unknown command HELLO"
+      // and we silently fall back to per-process memory, which quietly breaks
+      // cross-process trace stitching. RESP2 is understood by every version and
+      // we use no RESP3 feature.
+      RESP: 2,
     });
     client.on('error', () => {}); // handled by connect() rejecting
     await client.connect();

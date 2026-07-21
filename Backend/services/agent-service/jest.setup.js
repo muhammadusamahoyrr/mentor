@@ -12,12 +12,25 @@ process.env.AGENT_DOCS_DIR = path.join(__dirname, 'src', '__tests__', 'fixtures'
 // already-set var, so this wins. Tests must never call the network.
 process.env.AGENT_PROVIDER = 'anthropic';
 
-// Leave ANTHROPIC_API_KEY / BRAVE_API_KEY unset on purpose: the loop tests inject
-// a fake client, and the web_search test asserts the no-key guard fires.
-delete process.env.BRAVE_API_KEY;
+// Neutralise the external API keys: the loop tests inject a fake client, and the
+// web_search test asserts the no-key guard fires.
+//
+// ⚠️ EMPTY STRING, NOT `delete`. server.js calls dotenv.config() AFTER this file
+// and fills in any key that is ABSENT — deleting hands the real key straight back
+// and the suite starts calling the live API. An empty string is still "in"
+// process.env, so dotenv leaves it, and every guard treats it as missing.
+process.env.BRAVE_API_KEY = '';
+
+// Run the tools IN-PROCESS by default. .env now carries a real
+// HEALTHCARE_MCP_URL, and dotenv would hand it to the suite — every test would
+// then try to reach an MCP server that is not running and fail with a 500. The
+// one suite that genuinely wants MCP (mcpGateway.test.js) boots its own server
+// and sets this itself. Empty string, not delete, so dotenv cannot refill it.
+process.env.HEALTHCARE_MCP_URL = '';
 
 // Force session memory onto its in-process fallback (no dependency on a running
 // Redis in CI, and no lingering socket handle).
+process.env.REDIS_HOST = '127.0.0.1';
 process.env.REDIS_PORT = '65530';
 
 // No Kafka broker in tests — make the audit sink a no-op so a low-confidence
@@ -25,4 +38,5 @@ process.env.REDIS_PORT = '65530';
 process.env.AGENT_DISABLE_KAFKA = '1';
 
 // The embed test asserts the no-key guard; retrieval tests mock embeddings.
-delete process.env.VOYAGE_API_KEY;
+// Empty string rather than delete, for the dotenv reason above.
+process.env.VOYAGE_API_KEY = '';

@@ -11,7 +11,10 @@ const { isThinResult } = require('./confidence');
 const { createClient, defaultModel } = require('./providers/factory');
 const { emptyUsage, addUsage, summarize } = require('./providers/usage');
 
-const MAX_STEPS = Number(process.env.AGENT_MAX_STEPS || 6); // guardrail: cap tool loops so a runaway can't burn the budget
+// Guardrail: cap tool loops so a runaway can't burn the budget. 10, not 6 — the
+// first live run spent all six steps on progressively refined web searches and
+// returned "reached the maximum number of reasoning steps" instead of an answer.
+const MAX_STEPS = Number(process.env.AGENT_MAX_STEPS || 10);
 const MAX_TOKENS = 2048;
 
 const textOf = (content) =>

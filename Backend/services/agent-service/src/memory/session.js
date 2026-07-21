@@ -46,6 +46,10 @@ async function ensure() {
         reconnectStrategy: false, // one shot; fall back to memory on failure
       },
       password: process.env.REDIS_PASSWORD || undefined,
+      // RESP2: the v4+ client's RESP3 handshake uses HELLO, which only exists
+      // from Redis 6.0. Against an older server the connect fails and sessions
+      // silently degrade to per-process memory. See shared/trace/traceStore.js.
+      RESP: 2,
     });
     client.on('error', () => {}); // errors are handled by the connect() reject
     await client.connect();

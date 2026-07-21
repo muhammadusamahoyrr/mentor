@@ -7,6 +7,11 @@ this one is the **implementation** (what actually exists, and how to run it).
 clean, frontend typechecks. Shipped in commit `59e3d8f` on
 `feat/backend-dev-runner`.
 
+**✅ Verified live** (2026-07-21) against real Gemini + real Brave: a question
+went agent-service → MCP → Brave → grounded answer with a parsed source, and the
+trace stitched across BOTH processes via Redis. See §8 for what that run
+uncovered.
+
 ---
 
 ## 1. The one-line summary
@@ -279,8 +284,43 @@ Backend/services/agent-service/src/agent/
 
 - `.mcp.json` is **not** committed — the Claude Code demo needs manual config.
   (Assignment item 2 is satisfied by the custom client, so this is optional.)
-- **Nothing has run against a real LLM, real Redis, or live sibling services.**
-  Everything is proven with mocked models. The first live run is still ahead.
 - `stdio.js` has no automated test (manually verified to boot).
 - Frontend `TraceView`/`SourceList` are typechecked only — the repo has no
-  frontend test setup.
+  frontend test setup. **The UI has not been opened in a browser yet** — the live
+  run was driven over HTTP.
+- Orchestration (`AGENT_MODE=supervisor`) has not been exercised live, only in
+  tests. Expect it to be rate-limit sensitive on the Gemini free tier.
+
+## 8. What the first live run (2026-07-21) uncovered
+
+Run: real Gemini 2.5 flash + real Brave, agent-service ↔ healthcare-mcp.
+Result: a correct, grounded answer on NICE NG136 in ~14.5s, `confidence: high`,
+one parsed source, 3 `web_search` calls through MCP, trace spanning both
+services. Three things had to be fixed to get there.
+
+**1. `AGENT_MAX_STEPS=6` is too low for a research question.** The first attempt
+returned *"(Stopped: reached the maximum number of reasoning steps)"* after six
+`web_search` calls. The trace showed those queries progressively refining
+(AHA/ACC → NICE → NG136 → PREVENT) — the model was researching properly and ran
+out of budget, not looping. Raised the default to **10**. Tune down if the free
+tier rate-limits.
+
+**2. Local Redis is 3.0.504 — too old for the client.** The Windows Redis port
+still shipping on this machine predates `HELLO` (Redis 6.0), which `redis@6.x`
+sends for its RESP3 handshake. Every connect failed with
+`ERR unknown command 'HELLO'` and BOTH session memory and the trace store
+silently fell back to per-process memory — so the cross-process trace, a
+headline feature, quietly did not work. Fixed by pinning **`RESP: 2`** in
+`shared/trace/traceStore.js` and `agent-service/src/memory/session.js`. RESP2 is
+understood by every Redis version and we use no RESP3 feature.
+
+**3. Creating `.env` files broke the test suites — and made tests call live
+APIs.** `dotenv.config()` fills any key that is ABSENT, and it runs *after*
+`jest.setup.js`. So `delete process.env.BRAVE_API_KEY` handed the real key
+straight back: `web_search` started succeeding and the fail-closed tests broke.
+Same mechanism leaked the new `HEALTHCARE_MCP_URL` into every suite, pointing
+them at an MCP server that was not running (500s everywhere).
+
+> **Rule: in `jest.setup.js`, neutralise env with `= ''`, never `delete`.**
+> An empty string is still "in" `process.env`, so dotenv leaves it alone, and
+> every guard in the code treats it as missing.
